@@ -20,10 +20,12 @@ nest.set_verbosity("M_ERROR")
 
 TIME_SIMULATION = 10
 
-create_execution_key @= lambda i, c, p: f"{create_sound_key(i)}&{c}&{p}"
-ex_key_with_time = (
-    lambda *args: f"{datetime.datetime.now().isoformat()[:-7]}&{create_execution_key(*args)}"
-)
+
+def create_execution_key(i, c, p):
+    return f"{create_sound_key(i)}&{c}&{p}"
+
+def ex_key_with_time(*args):
+    return f"{datetime.datetime.now().isoformat()[:-7]}&{create_execution_key(*args)}"
 
 def create_save_result_object(
     input,
@@ -105,7 +107,7 @@ if __name__ == "__main__":
             ex_key = create_execution_key(input, cochlea_key, param.key)
             logger.info(f">>>>> now testing arch n.{current_run+1} of {num_runs}")
             angle_to_rate = {}
-            for angle in tqdm(ANGLES, "⮡ angles"):
+            for angle in [0]:#tqdm(ANGLES, "⮡ angles"):
                 nest.ResetKernel()
                 nest.SetKernelStatus(param.CONFIG.NEST_KERNEL_PARAMS)
 
