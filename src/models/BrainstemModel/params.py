@@ -50,7 +50,7 @@ class Parameters:
             default_factory=lambda: {
                 "resolution": 0.1,
                 "rng_seed": 42,
-                "total_num_virtual_procs": 16,
+                "total_num_virtual_procs": 32,
             }
         )
 
