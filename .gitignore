@@ -15,3 +15,4 @@ secrets
 .python-version
 results
 .DS_Store
+simulate/jobs/*

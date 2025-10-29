@@ -11,14 +11,15 @@ from utils.anf_utils import TC_COC_KEY, create_sound_key, load_anf_response
 from utils.cochlea_utils import ANGLES
 from utils.path_utils import Paths, save_current_conf
 from models.BrainstemModel.BrainstemModel import BrainstemModel
-from models.BrainstemModel.params import Parameters as TCParam
+from models.BrainstemModel.params import Parameters as paper_params
+from models.BrainstemModel.new_params import Parameters as new_params
 from utils.custom_sounds import Click, Tone, ToneBurst, WhiteNoise, Clicks, HarmonicComplex
 from utils.log_utils import logger, tqdm
 
 
 nest.set_verbosity("M_ERROR")
 
-TIME_SIMULATION = 10
+TIME_SIMULATION = 1000
 
 
 def create_execution_key(i, c, p):
@@ -65,8 +66,11 @@ if __name__ == "__main__":
     models = [BrainstemModel]
     cochlea_key = TC_COC_KEY
 
-    p1 = TCParam("subject_1")
+    p1 = paper_params("subject_1")
     p1.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 1
+
+    p2 = new_params("subject_1_new")
+    p2.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 1
 
     # p2 = TCParam("itd_only")
     # p2.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 'itd_only'
@@ -90,7 +94,7 @@ if __name__ == "__main__":
 #     p6.SYN_WEIGHTS.LNTBCs2MSO = 0
 #     p6.SYN_WEIGHTS.NTBCs2MSO = 0
 
-    params = [p1]
+    params = [p2, p1]
 
     num_runs = len(inputs) * len(params)
     current_run = 0
@@ -107,7 +111,7 @@ if __name__ == "__main__":
             ex_key = create_execution_key(input, cochlea_key, param.key)
             logger.info(f">>>>> now testing arch n.{current_run+1} of {num_runs}")
             angle_to_rate = {}
-            for angle in [0]:#tqdm(ANGLES, "⮡ angles"):
+            for angle in tqdm(ANGLES, "⮡ angles"):
                 nest.ResetKernel()
                 nest.SetKernelStatus(param.CONFIG.NEST_KERNEL_PARAMS)
 
