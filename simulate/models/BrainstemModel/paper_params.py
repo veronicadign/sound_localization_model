@@ -8,7 +8,7 @@ class Parameters:
     cochlea: dict[str, dict[str, float]] = field(
         default_factory=lambda: (
             {
-                "gammatone": {
+                "Gammatone": {
                     "hrtf_params": {
                         "subj_number": 1,
                         "ild_only": False,
@@ -18,7 +18,7 @@ class Parameters:
                     "refractory_period": 1,  # ms
                     "amplif_factor": 7,
                 },
-                "ppg": {
+                "Ppg": {
                     "nest": {
                         "resolution": 0.1,
                         "rng_seed": 42,
