@@ -1,4 +1,5 @@
 from os import makedirs
+from typing import Union   # ✅ added
 
 import numpy as np
 from brian2 import Hz, SpikeMonitor, kHz, ms, plot, run, seed, show
@@ -36,12 +37,15 @@ def resample_binaural_sound(binaural_sound: Sound):
     # Resample both channels
     left_resampled = resample_sound(binaural_sound.left, original_fs)
     right_resampled = resample_sound(binaural_sound.right, original_fs)
-    return Sound((left_resampled, right_resampled), samplerate=50 * kHz)
+    return Sound((left_resampled, right_resampled), samplerate=100 * kHz)
 
 
 @memory.cache
 def sound_to_spikes(
-    sound: Sound | Tone | ToneBurst, angle, params: dict, plot_spikes=False
+    sound: Union[Sound, Tone, ToneBurst],  # ✅ fixed here
+    angle,
+    params: dict,
+    plot_spikes=False,
 ) -> AnfResponse:
     hrtf_params = params["hrtf_params"]
     rng_seed = params["rng_seed"]
@@ -49,7 +53,7 @@ def sound_to_spikes(
     seed(rng_seed)
     coch_par = params.get("cochlea_params", None)
     logger.debug(
-        f"genenerating spikes for {dict_of(sound,angle,plot_spikes,hrtf_params)}"
+        f"genenerating spikes for {dict_of(sound, angle, plot_spikes, hrtf_params)}"
     )
     binaural = run_hrtf(sound, angle, hrtf_params)
     logger.debug(f"binaural sound post hrtf level={binaural.level}")
@@ -75,5 +79,6 @@ def sound_to_spikes(
             show()
 
         binaural_IHC_response[channel] = M.spike_trains()
+
     logger.info("generation complete.")
     return AnfResponse(binaural_IHC_response, binaural_sound.left, binaural_sound.right)

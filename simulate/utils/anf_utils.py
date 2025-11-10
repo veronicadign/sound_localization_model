@@ -4,15 +4,16 @@ from joblib.memory import MemorizedFunc
 from sorcery import dict_of
 from utils.custom_sounds import Click, Tone, ToneBurst, WhiteNoise, Clicks, HarmonicComplex
 from utils.log_utils import logger
+from typing import Union   # ✅ added
 
-from cochleas.DCGC import COCHLEA_KEY as DCGC_COC_KEY
-from cochleas.DCGC import sound_to_spikes as DCGC_cochlea
 from cochleas.GammatoneCochlea import COCHLEA_KEY as GAMMATONE_COC_KEY
 from cochleas.GammatoneCochlea import sound_to_spikes as gammatone_cochlea
 from cochleas.PpgCochlea import COCHLEA_KEY as PPG_COC_KEY
 from cochleas.PpgCochlea import tone_to_ppg_spikes as ppg_cochlea
 from cochleas.TanCarneyCochlea import COCHLEA_KEY as TC_COC_KEY
 from cochleas.TanCarneyCochlea import sound_to_spikes as tc_cochlea
+from cochleas.ZilanyCochlea import COCHLEA_KEY as ZI_COC_KEY
+from cochleas.ZilanyCochlea import sound_to_spikes as zi_cochlea
 
 from utils.cochlea_utils import ANGLES, IRCAM_HRTF_ANGLES, NUM_ANF_PER_HC, NUM_CF, AnfResponse
 import nest
@@ -25,7 +26,7 @@ COCHLEAS = {
     GAMMATONE_COC_KEY: gammatone_cochlea,
     PPG_COC_KEY: ppg_cochlea,
     TC_COC_KEY: tc_cochlea,
-    DCGC_COC_KEY: DCGC_cochlea,
+    ZI_COC_KEY: zi_cochlea,
 }
 
 
@@ -63,12 +64,11 @@ def create_sound_key(sound):
             level = "XX"
     else:
         raise NotImplementedError(f"sound {sound} is not a Tone")
-    return f"{sound_type}{f"_{add_info}" if add_info else ""}_{level}dB"
-
+    return f"{sound_type}{level}dB"
 
 
 def load_anf_response(
-    sound: Tone | Sound | ToneBurst | Click | Clicks | WhiteNoise,
+    sound: Union[Tone, Sound, ToneBurst, Click, Clicks, WhiteNoise],  # ✅ fixed here
     angle: int,
     cochlea_key: str,
     params: dict,
@@ -81,19 +81,19 @@ def load_anf_response(
     if ignore_cache:
         logger.info(f"ignoring cache. generation will take some time...")
     logger.info(
-        f"generating ANF for {
-        dict_of(sound,angle,cochlea_key,params)}"
+        f"generating ANF for {dict_of(sound, angle, cochlea_key, params)}"
     )
     if ignore_cache:
         cochlea_func = cochlea_func.call  # forces execution
     try:
-        anf = cochlea_func(sound, angle, params)
+        anf = cochlea_func(sound, angle, params, plot_spikes=False)
     except TypeError as e:
         if "unexpected" in e.args[0]:
             logger.error(f"{e}, please check the signature of cochlea")
         raise e
 
     return anf
+
 
 def spikes_to_nestgen(anf_response: AnfResponse):
     nest.set_verbosity("M_ERROR")
@@ -110,7 +110,6 @@ def spikes_to_nestgen(anf_response: AnfResponse):
             NUM_CF * NUM_ANF_PER_HC,
             params={
                 "spike_times": s,
-                # "spike_times": [i[i != 0] / ms for i in response_ANF.values()],
                 "allow_offgrid_times": [True] * NUM_CF * NUM_ANF_PER_HC,
             },
         )

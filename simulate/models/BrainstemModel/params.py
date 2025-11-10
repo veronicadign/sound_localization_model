@@ -34,6 +34,22 @@ class Parameters:
                     "rng_seed": 42,
                     "omni_noise_level": 0,
                 },
+                "Zilany": {
+                    "hrtf_params": {
+                        "subj_number": 1,
+                        "itd_remove_strategy": ITD_REMOVAL_STRAT.ESTIMATE_FROM_HRTF,
+                    },
+                    "cochlea_params": {
+                        "anf_num": (10, 0, 0),          # Example fiber counts (HSR, MSR, LSR)           # Example Greenwood parameters (min_cf, max_cf, num_cf)
+                        "species": "human",                # 'cat', 'human', or 'human_glasberg1990'
+                        "cohc": 1.0,                       # Outer hair cell health (0–1)
+                        "cihc": 1.0,                       # Inner hair cell health (0–1)
+                        "powerlaw": "approximate",         # or 'actual'
+                        "ffGn": False                      # Factorial Gaussian noise disabled
+                    },
+                    "rng_seed": 42,
+                    "omni_noise_level": 0,
+                }
             }
         )
     )

@@ -2,6 +2,7 @@ from inspect import getsource
 
 import nest
 import numpy as np
+from typing import Union 
 
 from utils.cochlea_utils import AnfResponse
 from utils.anf_utils import spikes_to_nestgen
@@ -300,7 +301,7 @@ class BrainstemModel(SpikingModel):
             syn_spec={"weight": P.SYN_WEIGHTS.MNTBCs2LSO},
         )
 
-    def simulate(self, time: float | int):
+    def simulate(self, time: Union[float, int]):
         # split in time chunks
         TIME_PER_CHUNK_TQDM = 100
         chunks = time // TIME_PER_CHUNK_TQDM
