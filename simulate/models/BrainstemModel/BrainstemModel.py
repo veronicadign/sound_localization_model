@@ -41,17 +41,16 @@ class BrainstemModel(SpikingModel):
                 "parrot_neuron", len(self.pops[side]["ANF"])
             )
             self.pops[side]["SBC"] = nest.Create(
-                "iaf_cond_alpha",
+                "iaf_cond_beta",
                 P.n_SBCs,
                 params={
                     "C_m": P.MEMB_CAPS.SBC,
                     "V_reset": P.V_reset,
                     "g_L": P.G_LEAK.SBC,
-                    # "t_ref": 3,
                 },
             )
             self.pops[side]["GBC"] = nest.Create(
-                "iaf_cond_alpha",
+                "iaf_cond_beta",
                 P.n_GBCs,
                 params={
                     "C_m": P.MEMB_CAPS.GBC,
@@ -61,7 +60,7 @@ class BrainstemModel(SpikingModel):
                 },
             )
             self.pops[side]["LNTBC"] = nest.Create(
-                "iaf_cond_alpha",
+                "iaf_cond_beta",
                 P.n_GBCs,
                 params={
                     "C_m": P.MEMB_CAPS.LNTBC,
@@ -70,7 +69,7 @@ class BrainstemModel(SpikingModel):
                 },
             )
             self.pops[side]["MNTBC"] = nest.Create(
-                "iaf_cond_alpha",
+                "iaf_cond_beta",
                 P.n_GBCs,
                 params={
                     "C_m": P.MEMB_CAPS.MNTBC,
@@ -92,7 +91,7 @@ class BrainstemModel(SpikingModel):
                 },
             )
             self.pops[side]["LSO"] = nest.Create(
-                "iaf_cond_alpha",
+                "iaf_cond_beta",
                 P.n_LSOs,
                 params={
                     "C_m": P.MEMB_CAPS.LSO,

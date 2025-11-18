@@ -169,12 +169,12 @@ class Parameters:
     @dataclass
     class G_LEAK:
         # default: float = 16.67
-        SBC: int = 16.67
-        GBC: int = 16.67
-        LNTBC: int = 16.67
-        MNTBC: int = 16.67
-        MSO: float = 16.67
-        LSO: float = 16.67
+        SBC: int = 40
+        GBC: int = 25
+        LNTBC: int = 25
+        MNTBC: int = 25
+        MSO: float = 80
+        LSO: float = 20
 
     def __post_init__(self):
         # horrible, but i need each to be an instance so that changes
