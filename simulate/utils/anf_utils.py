@@ -2,7 +2,7 @@ from brian2 import Hz, kHz, ms
 from brian2hears import Sound
 from joblib.memory import MemorizedFunc
 from sorcery import dict_of
-from utils.custom_sounds import Click, Tone, ToneBurst, WhiteNoise, Clicks, HarmonicComplex
+from utils.custom_sounds import Click, Tone, ToneBurst, WhiteNoise, Click_Train, HarmonicComplex
 from utils.log_utils import logger
 from typing import Union   # ✅ added
 
@@ -31,44 +31,37 @@ COCHLEAS = {
 
 
 def create_sound_key(sound):
+    
     add_info = None
     if type(sound) is Tone:
         add_info = str(sound.frequency).replace(" ", "")
-        sound_type = "tone"
         level = int(sound.sound.level)
+        sound_type = "tone"
     elif type(sound) is ToneBurst:
         add_info = str(sound.frequency).replace(" ", "")
-        sound_type = "toneburst"
         level = int(sound.sound.level)
+        sound_type = "toneburst"
     elif type(sound) is WhiteNoise:
         sound_type = "whitenoise"
         level = int(sound.sound.level)
     elif type(sound) is Click:
         sound_type = "click"
-        if sound.peak is not None:
-            level = sound.peak
-        else:
-            level = "XX"
-    elif type(sound) is Clicks:
-        sound_type = "clicks"
-        add_info = str(sound.number).replace(" ", "")
-        if sound.peak is not None:
-            level = sound.peak
-        else:
-            level = "XX"
+        level = int(sound.peak)
+    elif type(sound) is Click_Train:
+        sound_type = "click_train"
+        level = int(sound.peak)
     elif type(sound) is HarmonicComplex:
         sound_type = "harmonic"
-        if sound.sound.level is not None:
-            level = int(sound.sound.level)
-        else:
-            level = "XX"
     else:
-        raise NotImplementedError(f"sound {sound} is not a Tone")
-    return f"{sound_type}{level}dB"
+        raise NotImplementedError(f"unknown sound {sound}")
+    if add_info:
+        return f"{sound_type}_{add_info}_{level}dB"
+    else:
+        return f"{sound_type}_{level}dB"
 
 
 def load_anf_response(
-    sound: Union[Tone, Sound, ToneBurst, Click, Clicks, WhiteNoise],  # ✅ fixed here
+    sound: Union[Tone, Sound, ToneBurst, Click, Click_Train, WhiteNoise],  # ✅ fixed here
     angle: int,
     cochlea_key: str,
     params: dict,
