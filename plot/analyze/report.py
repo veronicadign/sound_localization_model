@@ -2,7 +2,6 @@ import logging
 from bisect import bisect_left
 from collections import defaultdict
 from contextlib import ExitStack
-from itertools import batched
 import math
 from math import ceil
 from pathlib import PurePath
@@ -147,7 +146,7 @@ def draw_hist(
             )
         ax.set_yscale("log")
         ax.set_ylim(CFMIN, CFMAX)
-        yticks = [20, 100, 500, 1000, 5000, 10000, 20000]
+        yticks = [125, 500, 1000, 5000, 10000, 20000]
         ax.set_yticks(yticks)
         ax.set_yticklabels([f"{freq} Hz" for freq in yticks])
         if freq is not None:
@@ -581,7 +580,7 @@ def draw_spikes_pop(
     side,
     pop,
     y_ax = 'cf_custom',
-    f_ticks = [100,1000,10000],
+    f_ticks = [125,1000,10000],
     title=None,
     plot_sound = False,
     xlim=None,
@@ -801,7 +800,7 @@ def draw_spikes_and_psth_bothside(
     angle,
     pop,
     y_ax='cf_custom',
-    f_ticks=[100, 1000, 10000],
+    f_ticks=[125, 1000, 10000],
     title=None,
     plot_sound=False,
     xlim=None,
@@ -1715,7 +1714,7 @@ def plot_tonotopic_heatmaps(
 
             # Add fixed 20 kHz tick at the top edge (not centered)
             y_positions.append(-0.5)  # Top edge
-            y_labels.append("20 Hz")
+            y_labels.append("125 Hz")
 
             for freq in f_ticks:
                 # Format frequency label
@@ -1774,3 +1773,245 @@ def plot_tonotopic_heatmaps(
         fig.suptitle(title, fontsize=16)
     
     return fig
+
+def draw_rate_vs_angle_pop_multi(
+    
+    data_list,                      # list of datasets
+    title=None,
+    pop='LSO',
+    rate=True,                      # True = avg, False = population
+    cf_interval=None,
+    sides=None,
+    color=None,
+    norm=False,                     # False, True, "zscore", "minmax"
+    figsize=[7,4],
+    ax=None,
+    ylim=None,
+    label=None,
+    error_type="sem"                # "sem" or "std"
+):
+    # -----------------------------------------------------
+    # Setup
+    # -----------------------------------------------------
+    if sides is None:
+        sides = ["L","R"]
+
+    angles = list(data_list[0]["angle_to_rate"].keys())
+
+    # Colors
+    if isinstance(color, dict):
+        side_colors = color
+    elif isinstance(color, str):
+        side_colors = {sides[0]: color}
+    else:
+        side_colors = {"L": "m", "R": "g"}
+
+    # Accumulators
+    avg_accum = {s: [] for s in sides}
+    pop_accum = {s: [] for s in sides}
+
+    # -----------------------------------------------------
+    # Extract rate curves from each dataset
+    # -----------------------------------------------------
+    for data in data_list:
+        angle_to_rate = data["angle_to_rate"]
+        duration = data.get(
+            "simulation_time",
+            data["basesound"].sound.duration / b2.ms
+        ) * b2.ms
+
+        tot_spikes, avg_neuron_rate, _ = calculate_firing_rates(
+            angle_to_rate, pop, sides, angles, duration, cf_interval
+        )
+
+        for s in sides:
+            avg_accum[s].append(np.array(avg_neuron_rate[s]))
+            pop_accum[s].append(np.array(tot_spikes[s]))
+
+    # -----------------------------------------------------
+    # Compute mean + error
+    # -----------------------------------------------------
+    def compute_mean_and_error(accum):
+        arr = np.vstack(accum)
+        mean = arr.mean(axis=0)
+
+        if error_type == "std":
+            err = arr.std(axis=0)
+        else:
+            err = arr.std(axis=0) / np.sqrt(arr.shape[0])  # SEM
+
+        return mean, err
+
+    avg_mean, avg_err = {}, {}
+    pop_mean, pop_err = {}, {}
+
+    for s in sides:
+        avg_mean[s], avg_err[s] = compute_mean_and_error(avg_accum[s])
+        pop_mean[s], pop_err[s] = compute_mean_and_error(pop_accum[s])
+
+    # -----------------------------------------------------
+    # Choose rate type
+    # -----------------------------------------------------
+    if rate is True:
+        mean_used = avg_mean
+        err_used = avg_err
+        ylabel_text = "Avg Firing Rate [Hz]"
+    else:
+        mean_used = pop_mean
+        err_used = pop_err
+        ylabel_text = "Population Firing Rate [Hz]"
+
+    # -----------------------------------------------------
+    # NORMALIZATION OPTIONS
+    # norm = False | True | "zscore" | "minmax"
+    # -----------------------------------------------------
+    original_values = None
+
+    if norm:
+        original_values = {s: mean_used[s].copy() for s in sides}
+
+        for s in sides:
+            x = mean_used[s]
+            err = err_used[s]
+
+            if norm is True:
+                # Normalize by maximum
+                max_val = x.max() if x.max() != 0 else 1e-9
+                mean_used[s] = x / max_val
+                err_used[s] = err / max_val
+
+                
+
+            elif norm == "zscore":
+                mu = x.mean()
+                sigma = x.std() if x.std() > 1e-12 else 1e-12
+                mean_used[s] = (x - mu) / sigma
+                err_used[s] = err / sigma
+
+
+            elif norm == "minmax":
+                mn = x.min()
+                mx = x.max()
+                rng = mx - mn if mx != mn else 1e-9
+                mean_used[s] = (x - mn) / rng
+                err_used[s] = err / rng
+
+
+
+            else:
+                raise ValueError("norm must be False, True, 'zscore', or 'minmax'")
+            
+        ylabel_text = "Normalized " + ylabel_text
+
+    # -----------------------------------------------------
+    # Plotting
+    # -----------------------------------------------------
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+
+    for s in sides:
+        pl = label if label else f"{s} (mean)"
+
+        ax.errorbar(
+            angles,
+            mean_used[s],
+            yerr=err_used[s],
+            fmt='o-',
+            color=side_colors[s],
+            ecolor=side_colors[s],
+            elinewidth=1.4,
+            capsize=4,
+            label=pl
+        )
+
+    if len(sides) > 1 and label is None:
+        ax.legend()
+
+    # Aesthetics
+    ax.set_xticks(angles)
+    ax.set_xticklabels([f"{a}°" for a in angles])
+    ax.set_xlabel("Azimuth Angle")
+    ax.set_ylabel(ylabel_text)
+
+    if ylim:
+        ax.set_ylim(ylim)
+    if title:
+        ax.set_title(title)
+
+    plt.tight_layout()
+    return ax, original_values if norm else ax
+
+def plot_anf_rasterplot(
+    spikes_series,
+    figsize=(10, 5),
+    color="black",
+    linewidth=0.5,
+    remove_yticks=False,
+    title="ANF Raster Plot",
+):
+    """
+    Plot a raster plot from a Pandas Series of spike times.
+    
+    spikes_series: pd.Series
+        Each entry is a list of spike times for one neuron.
+    """
+    fig, ax = plt.subplots(figsize=figsize)
+
+    ax.eventplot(
+        spikes_series.values,
+        colors=color,
+        linewidths=linewidth
+    )
+
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Neuron index")
+
+    if remove_yticks:
+        ax.set_yticks([])
+
+    ax.set_title(title)
+    plt.tight_layout()
+    return fig, ax
+
+def plot_sound(
+    sound,
+    figsize=(10, 4),
+    title="Sound waveform",
+    time_in_ms=False,
+    xlim = None):
+    """
+    Plot a Brian2Hears Sound object over time.
+    Works for mono or stereo.
+    
+    sound: brian2hears.Sound
+    """
+    # Sound → numpy array: shape (samples, channels)
+    wave = np.array(sound)
+    fs = float(sound.samplerate)
+
+    # time axis
+    t = np.arange(wave.shape[0]) / fs
+    if time_in_ms:
+        t = t * 1000
+        xlabel = "Time (ms)"
+    else:
+        xlabel = "Time (s)"
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # mono
+    if wave.ndim == 2 and wave.shape[1] == 1:
+        ax.plot(t, wave[:, 0], linewidth=0.8)
+    # stereo
+    else:
+        for ch in range(wave.shape[1]):
+            ax.plot(t, wave[:, ch], linewidth=0.8, label=f"Ch {ch}")
+        ax.legend()
+
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("Amplitude")
+    ax.set_title(title)
+    if xlim:
+        ax.set_xlim(xlim)
+    plt.tight_layout()
+    return fig, ax
