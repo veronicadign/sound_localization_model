@@ -12,14 +12,11 @@ from utils.cochlea_utils import ANGLES
 from utils.path_utils import Paths, save_current_conf
 from models.BrainstemModel.BrainstemModel import BrainstemModel
 from models.BrainstemModel.params import Parameters as params
-from utils.custom_sounds import Click, Tone, ToneBurst, WhiteNoise, Clicks, HarmonicComplex
+from utils.custom_sounds import Click, Tone, ToneBurst, WhiteNoise, Click_Train, HarmonicComplex
 from utils.log_utils import logger, tqdm
 
 
 nest.set_verbosity("M_ERROR")
-
-TIME_SIMULATION = 200
-
 
 def create_execution_key(i, c, p):
     return f"{create_sound_key(i)}&{c}&{p}"
@@ -29,6 +26,9 @@ def ex_key_with_time(*args):
 
 def create_save_result_object(
     input,
+    gated_sound,
+    l_hrtf_sound,
+    r_hrtf_sound,
     angle_to_rate,
     model,
     param,
@@ -37,7 +37,12 @@ def create_save_result_object(
     **kwargs,
 ):
     result = {}
-    result["basesound"] = input
+    result["sounds"] = {
+        "base_sound": input,
+        "gated_sound": gated_sound,
+        "l_hrtf_sound": l_hrtf_sound,
+        "r_hrtf_sound": r_hrtf_sound,
+    }
     result["angle_to_rate"] = angle_to_rate
     for key, arg in kwargs.items():
         result[key] = arg
@@ -52,21 +57,26 @@ def create_save_result_object(
 
 if __name__ == "__main__":
 
+    TIME_SIMULATION = 200
+
     #inputs = [Tone(100 * b2.Hz, TIME_SIMULATION * b2.ms), Tone(1000 * b2.Hz, TIME_SIMULATION * b2.ms), Tone(10000 * b2.Hz, TIME_SIMULATION * b2.ms), WhiteNoise(TIME_SIMULATION * b2.ms)]
     #inputs = [Tone(i, TIME_SIMULATION * b2.ms) for i in [100, 1000, 10000] * b2.Hz]
-    inputs = [Tone(100 * b2.Hz, TIME_SIMULATION * b2.ms)]
     #inputs = [WhiteNoise(TIME_SIMULATION * b2.ms)]
-    #inputs = [Clicks(duration=TIME_SIMULATION * b2.ms, click_duration=0.1 * b2.ms, interval=1 * b2.ms)]
+    inputs = [Tone(0.5 * b2.kHz, TIME_SIMULATION * b2.ms, level=70*b2h.dB), Click(duration= TIME_SIMULATION * b2.ms, click_duration=1, level=70*b2h.dB)]
     #inputs = [HarmonicComplex(i, TIME_SIMULATION * b2.ms) for i in [0.1] * b2.kHz]
 
-    for e in inputs:
-        e.sound.level = 70 * b2h.dB
         
     models = [BrainstemModel]
     cochlea_key = ZI_COC_KEY
 
+    p2 = params("subject_2")
+    p2.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 2
+
     p1 = params("subject_1")
     p1.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 1
+
+    p3 = params("subject_0")
+    p3.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 0
 
     # p2 = TCParam("itd_only")
     # p2.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 'itd_only'
@@ -90,7 +100,7 @@ if __name__ == "__main__":
 #     p6.SYN_WEIGHTS.LNTBCs2MSO = 0
 #     p6.SYN_WEIGHTS.NTBCs2MSO = 0
 
-    params = [p1]
+    params = [p3]
 
     num_runs = len(inputs) * len(params)
     current_run = 0
