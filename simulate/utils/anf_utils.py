@@ -8,8 +8,6 @@ from typing import Union   # ✅ added
 
 from cochleas.GammatoneCochlea import COCHLEA_KEY as GAMMATONE_COC_KEY
 from cochleas.GammatoneCochlea import sound_to_spikes as gammatone_cochlea
-from cochleas.PpgCochlea import COCHLEA_KEY as PPG_COC_KEY
-from cochleas.PpgCochlea import tone_to_ppg_spikes as ppg_cochlea
 from cochleas.TanCarneyCochlea import COCHLEA_KEY as TC_COC_KEY
 from cochleas.TanCarneyCochlea import sound_to_spikes as tc_cochlea
 from cochleas.ZilanyCochlea import COCHLEA_KEY as ZI_COC_KEY
@@ -24,7 +22,6 @@ INFO_FILE_NAME = "info.txt"
 INFO_HEADER = "this directory holds all computed angles, for a specific sound, with a specific cochlear backend. the pickled sound is also available. for cochleas that do not use HRTF, left and right sounds are the same. \n"
 COCHLEAS = {
     GAMMATONE_COC_KEY: gammatone_cochlea,
-    PPG_COC_KEY: ppg_cochlea,
     TC_COC_KEY: tc_cochlea,
     ZI_COC_KEY: zi_cochlea,
 }
@@ -60,22 +57,21 @@ def create_sound_key(sound):
         return f"{sound_type}_{level}dB"
 
 
-def load_anf_response(
-    sound: Union[Tone, Sound, ToneBurst, Click, Click_Train, WhiteNoise],  # ✅ fixed here
-    angle: int,
-    cochlea_key: str,
-    params: dict,
-    ignore_cache=False,
-):
+def load_anf_response(sound, angle, cochlea_key, params, ignore_cache=False):
+
     cochlea_func: MemorizedFunc = COCHLEAS[cochlea_key]
     params = params[cochlea_key]
+
     if not cochlea_func.check_call_in_cache(sound, angle, params):
-        logger.info(f"saved ANF not found. generation will take some time...")
+        logger.info("[load_anf_response] Saved ANF not found. Regenerating...")
+
     if ignore_cache:
-        logger.info(f"ignoring cache. generation will take some time...")
-    logger.info(
-        f"generating ANF for {dict_of(sound, angle, cochlea_key, params)}"
-    )
+        logger.info("[load_anf_response] Ignoring cache — forcing recompute.")
+        cochlea_func = cochlea_func.call
+
+    logger.info(f"[load_anf_response] Generating ANF for "
+                f"sound={sound}, angle={angle}, key={cochlea_key}")
+
     if ignore_cache:
         cochlea_func = cochlea_func.call  # forces execution
     try:
@@ -84,7 +80,6 @@ def load_anf_response(
         if "unexpected" in e.args[0]:
             logger.error(f"{e}, please check the signature of cochlea")
         raise e
-
     return anf
 
 

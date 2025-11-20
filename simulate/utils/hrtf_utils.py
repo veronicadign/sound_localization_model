@@ -140,31 +140,46 @@ def synthetic_ild(sound: Tone, angle: int):
 
 
 
-def run_hrtf(sound: Union[Sound, Tone, ToneBurst], angle, hrtf_params) -> Sound:
+def run_hrtf(sound: Union[Sound, Tone, ToneBurst], angle, hrtf_params) -> tuple[Sound, Sound]:
+    logger.debug(f"[run_hrtf] Starting HRTF for angle={angle} subj={hrtf_params['subj_number']}")
+
     subj = hrtf_params["subj_number"]
     orig_sound = sound
-    if type(sound) is not Sound:  # assume good faith, ok to fail otherwise
+
+    if type(sound) is not Sound:
         sound = sound.sound
-    #sound = apply_gating(sound, ramp_ms=hrtf_params.get("ramp_ms", 5.0))
+
+    # --- Apply gating ---
+    if hrtf_params.get("apply_gating"):
+        logger.debug("[run_hrtf] Applying gating before HRTF...")
+        sound = apply_gating(sound, ramp_ms=hrtf_params.get("ramp_ms"))
+
     samplerate = sound.samplerate
     original_duration = sound.duration
+
     if subj == "itd_only":
-        # delay sound to mimic time to reach ear (conservative approximation,
-        # it changes among HRTFs)
+        logger.debug("[run_hrtf] Using ITD-only synthetic transformation.")
         sound = Sound.sequence(
             Sound.silence(5 * ms, sound.samplerate),
             sound,
         )
         hrtfset = HeadlessDatabase(13, azim_max=90).load_subject()
-        hrtf = hrtfset(azim=angle)
-        binaural_sound: Sound = hrtf(sound)
+        binaural_sound: Sound = hrtfset(azim=angle)(sound)
+
     elif subj == "ild_only":
+        logger.debug("[run_hrtf] Using ILD-only synthetic transformation.")
         binaural_sound: Sound = synthetic_ild(orig_sound, angle)
+
     else:
+        logger.debug("[run_hrtf] Using IRCAM HRTF DB...")
         hrtfdb = IRCAM_LISTEN(Paths.IRCAM_DIR)
         hrtfset = hrtfdb.load_subject(hrtfdb.subjects[subj])
         hrtf = hrtfset(azim=ANGLE_TO_IRCAM[angle], elev=0)
         binaural_sound: Sound = hrtf(sound)
 
     binaural_sound = binaural_sound.resized(math.floor(original_duration * samplerate))
-    return binaural_sound
+    logger.debug("[run_hrtf] HRTF computation complete.")
+
+    return binaural_sound, sound
+
+

@@ -20,8 +20,9 @@ class ITD_REMOVAL_STRAT:
 @dataclass
 class AnfResponse:
     binaural_anf_spiketrain: dict
-    left: Sound
-    right: Sound
+    gated_sound: Sound        # ⬅️ for this angle
+    l_hrtf_sound: Sound       # ⬅️ for this angle
+    r_hrtf_sound: Sound       # ⬅️ for this angle
 
 
 @dataclass

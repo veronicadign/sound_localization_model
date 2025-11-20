@@ -20,13 +20,13 @@ class BrainstemModel(SpikingModel):
 
     def __init__(self, params: Parameters, anf: AnfResponse):
         self.params = params
-        logger.debug("creating spike generator according to input IHC response...")
+        logger.debug("Creating spike generator according to input IHC response...")
         anfs_per_ear = spikes_to_nestgen(anf)
         logger.debug(anfs_per_ear)
         self.anf = anf
-        logger.debug("creating rest of network...")
+        logger.debug("Creating rest of network...")
         self.create_network(params, anfs_per_ear)
-        logger.debug("model creation complete.")
+        logger.debug("Model creation complete. Starting simulation...")
 
     def describe_model(self):
         return {"name": self.name, "networkdef": getsource(self.create_network)}

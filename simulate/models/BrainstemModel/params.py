@@ -10,25 +10,22 @@ class Parameters:
             {
                 "gammatone": {
                     "hrtf_params": {
-                        "subj_number": 1,
+                        "subj_number": 0,
                         "ild_only": False,
                         "itd_remove_strategy": ITD_REMOVAL_STRAT.COMPUTED,
+                        "apply_gating": True,
+                        "ramp_ms": 10,
                     },
                     "noise_factor": 0.3,
                     "refractory_period": 1,  # ms
                     "amplif_factor": 7,
                 },
-                "ppg": {
-                    "nest": {
-                        "resolution": 0.1,
-                        "rng_seed": 42,
-                        "total_num_virtual_procs": 16,
-                    }
-                },
                 "TanCarney": {
                     "hrtf_params": {
                         "subj_number": 1,
                         "itd_remove_strategy": ITD_REMOVAL_STRAT.ESTIMATE_FROM_HRTF,
+                        "apply_gating": True,
+                        "ramp_ms": 10,
                     },
                     "cochlea_params": None,
                     "rng_seed": 42,
@@ -38,6 +35,8 @@ class Parameters:
                     "hrtf_params": {
                         "subj_number": 1,
                         "itd_remove_strategy": ITD_REMOVAL_STRAT.ESTIMATE_FROM_HRTF,
+                        "apply_gating": True,
+                        "ramp_ms": 10,
                     },
                     "cochlea_params": {
                         "anf_num": (10, 0, 0),          # Example fiber counts (HSR, MSR, LSR)           # Example Greenwood parameters (min_cf, max_cf, num_cf)

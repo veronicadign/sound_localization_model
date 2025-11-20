@@ -1611,126 +1611,150 @@ def draw_spikes_and_psth_bothside(
     title=None,
     xlim=None,
     ylim=None,
-    bin_size=1,       # histogram time bin in ms
-    cf_bin_size=3,    # CF histogram binning (neurons per bar)
+    bin_size=1,
+    cf_bin_size=3,
     raster_dot_size=1,
-    figsize=(10, 12)
+    figsize=(14, 16)
 ):
 
     side_colors = {'L': 'm', 'R': 'g'}
 
-    duration = res.get("simulation_time", res["basesound"].sound.duration / b2.ms)
-
+    duration = res.get("simulation_time", res["sounds"]["base_sound"].sound.duration / b2.ms)
     if xlim is None:
         xlim = [0, duration]
-
     if ylim is None:
         ylim = [CFMIN/Hz, CFMAX/Hz]
 
-    # -----------------------------------------------------------
-    # LAYOUT
-    # -----------------------------------------------------------
+    # -----------------------------------------------------------------------
+    # ✔️ NEW — read sounds from dicts keyed by angle (no index needed)
+    # -----------------------------------------------------------------------
+    base_sound  = res["sounds"]["base_sound"].sound
+    gated_sound = res["sounds"]["gated_sound"]
+
+    L_hrtf_sound = res["sounds"]["l_hrtf_sounds"][7]
+    R_hrtf_sound = res["sounds"]["r_hrtf_sounds"][0]
+
+    # -----------------------------------------------------------------------
+    # 7-row LAYOUT (same as previous revised version)
+    # -----------------------------------------------------------------------
     fig = plt.figure(figsize=figsize)
     gs = GridSpec(
-        4, 2, figure=fig,
-        width_ratios=[4, 1],    # raster 80%, histogram 20%
-        height_ratios=[0.4, 1, 1, 0.8],
+        7, 2, figure=fig,
+        width_ratios=[5, 1],
+        height_ratios=[0.2, 0.2, 0.2, 1, 0.2, 1, 0.8],
         hspace=0.35,
         wspace=0.05,
     )
 
-    ax_sound = fig.add_subplot(gs[0, 0])
-    sound = res["basesound"].sound
-    t = np.arange(len(sound)) / sound.samplerate * 1000
-    ax_sound.plot(t, sound, 'b', lw=2)
-    ax_sound.set_ylabel("Amplitude")
-    ax_sound.set_xlim(xlim)
-    ax_sound.set_title("Sound waveform")
-    ax_sound.grid(True, alpha=0.3)
+    # -----------------------------------------------------------------------
+    # ROW 0 — Original Sound
+    # -----------------------------------------------------------------------
+    ax_sound0 = fig.add_subplot(gs[0, 0])
+    t0 = np.arange(len(base_sound)) / base_sound.samplerate * 1000
+    ax_sound0.plot(t0, base_sound, 'b', lw=2)
+    ax_sound0.set_ylabel("Base")
+    ax_sound0.set_xlim(xlim)
+    ax_sound0.set_title("Sounds")
+    ax_sound0.grid(True, alpha=0.3)
 
+    # -----------------------------------------------------------------------
+    # ROW 1 — Gated sound
+    # -----------------------------------------------------------------------
+    ax_sound1 = fig.add_subplot(gs[1, 0])
+    t1 = np.arange(len(gated_sound)) / gated_sound.samplerate * 1000
+    ax_sound1.plot(t1, gated_sound, color='purple', lw=2)
+    ax_sound1.set_ylabel("Gated")
+    ax_sound1.set_xlim(xlim)
+    ax_sound1.grid(True, alpha=0.3)
 
-    ax_raster_L = fig.add_subplot(gs[1, 0])
-    ax_hist_L   = fig.add_subplot(gs[1, 1], sharey=ax_raster_L)
+    # -----------------------------------------------------------------------
+    # ROW 2 — Left HRTF sound
+    # -----------------------------------------------------------------------
+    ax_sound2 = fig.add_subplot(gs[2, 0])
+    t2 = np.arange(len(L_hrtf_sound)) / L_hrtf_sound.samplerate * 1000
+    ax_sound2.plot(t2, L_hrtf_sound, color='m', lw=2)
+    ax_sound2.set_ylabel("HRTF-L")
+    ax_sound2.set_xlim(xlim)
+    ax_sound2.grid(True, alpha=0.3)
 
-    ax_raster_R = fig.add_subplot(gs[2, 0])
-    ax_hist_R   = fig.add_subplot(gs[2, 1], sharey=ax_raster_R)
+    # -----------------------------------------------------------------------
+    # ROW 3 — Right HRTF sound
+    # -----------------------------------------------------------------------
+    ax_sound3 = fig.add_subplot(gs[4, 0])
+    t3 = np.arange(len(R_hrtf_sound)) / R_hrtf_sound.samplerate * 1000
+    ax_sound3.plot(t3, R_hrtf_sound, color='g', lw=2)
+    ax_sound3.set_ylabel("HRTF-R")
+    ax_sound3.set_xlim(xlim)
+    ax_sound3.grid(True, alpha=0.3)
 
-    ax_psth     = fig.add_subplot(gs[3, 0], sharex=ax_raster_L)
+    # -----------------------------------------------------------------------
+    # Remaining rows identical: Raster L, Raster R, PSTH
+    # -----------------------------------------------------------------------
+    ax_raster_L = fig.add_subplot(gs[3, 0])
+    ax_hist_L   = fig.add_subplot(gs[3, 1], sharey=ax_raster_L)
 
+    ax_raster_R = fig.add_subplot(gs[5, 0])
+    ax_hist_R   = fig.add_subplot(gs[5, 1], sharey=ax_raster_R)
+
+    ax_psth     = fig.add_subplot(gs[6, 0], sharex=ax_raster_L)
 
     # ===========================================================
-    # Helper function to compute FINAL spike set (time+CF filtered)
+    # Helper: Filter spikes
     # ===========================================================
     def filter_spikes(spikes, xlim, ylim):
         times = spikes["times"]
         senders = spikes["senders"]
         gids = spikes["global_ids"]
         n = len(gids)
-        #print('Total spikes before filtering:', len(times))
-        # Time filtering
+
         mask_t = (times >= xlim[0]) & (times <= xlim[1])
         times_t = times[mask_t]
         senders_t = senders[mask_t]
-        #print('Total spikes after time filtering:', len(times_t))
 
-        # CF mapping
         cf_hz = erbspace(CFMIN, CFMAX, n) / b2.Hz
         _, ymin_idx = take_closest(cf_hz, ylim[0])
-        #print('cf_min=', cf_hz[ymin_idx])
         _, ymax_idx = take_closest(cf_hz, ylim[1])
-        #print('cf_max=', cf_hz[ymax_idx])
 
         cf_min_id = gids[0] + ymin_idx
         cf_max_id = gids[0] + ymax_idx
-    
-        # CF filtering
-        #print('Total cell considered before CF filtering:', len(senders_t))
+
         mask_cf = (senders_t >= cf_min_id) & (senders_t <= cf_max_id)
-        #print('Total spikes after CF filtering:', np.sum(mask_cf))
+
         return (
-            times_t[mask_cf],     # times inside window
-            senders_t[mask_cf],   # senders inside window
+            times_t[mask_cf],
+            senders_t[mask_cf],
             cf_hz,
             ymin_idx,
             ymax_idx,
             gids
         )
 
-
     # ===========================================================
-    # RASTER + CF HISTOGRAMS
+    # RASTERS + CF HISTOGRAMS
     # ===========================================================
     for side, ax_raster, ax_hist in [
-        ('L', ax_raster_L, ax_hist_L),
-        ('R', ax_raster_R, ax_hist_R)
+        ("L", ax_raster_L, ax_hist_L),
+        ("R", ax_raster_R, ax_hist_R),
     ]:
 
         spikes = res["angle_to_rate"][angle][side][pop]
 
-        # Filter spikes according to visible time & CF window
-        times_f, senders_f, cf_full, ymin_idx, ymax_idx, gids = filter_spikes(
-            spikes, xlim, ylim
-        )
+        times_f, senders_f, cf_full, ymin_idx, ymax_idx, gids = \
+            filter_spikes(spikes, xlim, ylim)
 
         n_neurons = len(gids)
         local_ids_f = senders_f - gids[0]
 
-        # RASTER MAPPING
+        # RASTER Y-axis
         if y_ax == "cf":
-            cf_hz = cf_full
-            y_values = cf_hz[local_ids_f]
+            y_values = cf_full[local_ids_f]
             ax_raster.set_ylabel(f"{pop} CF [Hz]")
             ax_raster.set_ylim(ylim)
 
         else:
             y_values = local_ids_f
             ax_raster.set_ylim([ymin_idx, ymax_idx])
-
-            if y_ax == "ids":
-                ax_raster.set_ylabel(f"{pop} IDs")
-            elif y_ax == "global_ids":
-                ax_raster.set_ylabel(f"{pop} global IDs")
-            elif y_ax == "cf_custom":
+            if y_ax == "cf_custom":
                 ax_raster.set_ylabel(f"{pop} CF [Hz]")
                 tick_pos = []
                 for f in f_ticks:
@@ -1739,8 +1763,9 @@ def draw_spikes_and_psth_bothside(
                 ax_raster.set_yticks(tick_pos)
                 ax_raster.set_yticklabels(f_ticks)
 
-        # Plot RASTER
-        ax_raster.plot(times_f, y_values, '.', color=side_colors[side], markersize=raster_dot_size)
+        # RASTER
+        ax_raster.plot(times_f, y_values, '.', color=side_colors[side],
+                       markersize=raster_dot_size)
         ax_raster.set_xlim(xlim)
         ax_raster.text(
             0.0, 1.05, f"{side} side",
@@ -1749,17 +1774,14 @@ def draw_spikes_and_psth_bothside(
             color=side_colors[side]
         )
 
-        # ===================================================
-        # CF HISTOGRAM: computed ONLY from filtered spikes
-        # ===================================================
+        # CF HISTOGRAM
         spike_count = np.bincount(local_ids_f, minlength=n_neurons)
-
-        # group CF bins visually
         bins_cf = np.arange(0, n_neurons, cf_bin_size)
-        grouped_counts = [spike_count[i:i+cf_bin_size].sum() for i in bins_cf]
-        grouped_y = [np.arange(n_neurons)[i:i+cf_bin_size].mean() for i in bins_cf]
 
-        # restrict to ylim region
+        grouped_counts = [spike_count[i:i+cf_bin_size].sum() for i in bins_cf]
+        grouped_y      = [np.arange(n_neurons)[i:i+cf_bin_size].mean()
+                          for i in bins_cf]
+
         grouped_y = np.array(grouped_y)
         grouped_counts = np.array(grouped_counts)
         mask_vis = (grouped_y >= ymin_idx) & (grouped_y <= ymax_idx)
@@ -1767,26 +1789,23 @@ def draw_spikes_and_psth_bothside(
         ax_hist.barh(
             grouped_y[mask_vis],
             grouped_counts[mask_vis],
-            height=0.8 * cf_bin_size,
+            height=0.8*cf_bin_size,
             color=side_colors[side],
             alpha=0.4
         )
         ax_hist.set_ylim(ax_raster.get_ylim())
         ax_hist.set_xlabel("Spike count")
-        ax_hist.grid(False)
         ax_hist.tick_params(axis='y', labelleft=False)
 
-
     # ===========================================================
-    # PSTH — ALSO FILTERED BY TIME & CF RANGE
+    # PSTH
     # ===========================================================
-    for side in ['L', 'R']:
+    for side in ["L", "R"]:
         color = side_colors[side]
         spikes = res["angle_to_rate"][angle][side][pop]
 
-        times_f, senders_f, cf_full, ymin_idx, ymax_idx, gids = filter_spikes(
-            spikes, xlim, ylim
-        )
+        times_f, senders_f, cf_full, ymin_idx, ymax_idx, gids = \
+            filter_spikes(spikes, xlim, ylim)
 
         bins = np.arange(xlim[0], xlim[1] + bin_size, bin_size)
         ax_psth.hist(times_f, bins=bins, alpha=0.4, color=color, label=side)
@@ -1794,21 +1813,6 @@ def draw_spikes_and_psth_bothside(
     ax_psth.set_xlabel("Time [ms]")
     ax_psth.set_ylabel("Spike count")
     ax_psth.legend()
-    ax_psth.grid(True, alpha=0.3)
-    ax_psth.spines['top'].set_visible(False)
-    ax_psth.spines['right'].set_visible(False)
-
-
-    # -----------------------------------------------------------
-    # TITLE & LAYOUT
-    # -----------------------------------------------------------
-    if title:
-        fig.suptitle(title)
-        plt.subplots_adjust(top=0.92)
-
-    plt.show()
-
-    return
 
 def draw_rate_vs_angle(
     data,

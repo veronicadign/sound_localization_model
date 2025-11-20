@@ -27,8 +27,8 @@ def ex_key_with_time(*args):
 def create_save_result_object(
     input,
     gated_sound,
-    l_hrtf_sound,
-    r_hrtf_sound,
+    l_hrtf_sounds,
+    r_hrtf_sounds,
     angle_to_rate,
     model,
     param,
@@ -40,8 +40,8 @@ def create_save_result_object(
     result["sounds"] = {
         "base_sound": input,
         "gated_sound": gated_sound,
-        "l_hrtf_sound": l_hrtf_sound,
-        "r_hrtf_sound": r_hrtf_sound,
+        "l_hrtf_sounds": l_hrtf_sounds,
+        "r_hrtf_sounds": r_hrtf_sounds,
     }
     result["angle_to_rate"] = angle_to_rate
     for key, arg in kwargs.items():
@@ -49,7 +49,7 @@ def create_save_result_object(
     result["conf"] = save_current_conf(
         model, param, cochlea_key, create_sound_key(input)
     )
-    logger.info(f"\tsaving results for {ex_key} to {result_file.absolute()}...")
+    logger.info(f"\tSaving results for {ex_key} to {result_file.absolute()}...")
     with open(result_file, "wb") as f:
         dill.dump(result, f)
     del result
@@ -57,26 +57,25 @@ def create_save_result_object(
 
 if __name__ == "__main__":
 
-    TIME_SIMULATION = 200
+    TIME_SIMULATION = 250
+    level = 90 * b2h.dB
 
-    #inputs = [Tone(100 * b2.Hz, TIME_SIMULATION * b2.ms), Tone(1000 * b2.Hz, TIME_SIMULATION * b2.ms), Tone(10000 * b2.Hz, TIME_SIMULATION * b2.ms), WhiteNoise(TIME_SIMULATION * b2.ms)]
-    #inputs = [Tone(i, TIME_SIMULATION * b2.ms) for i in [100, 1000, 10000] * b2.Hz]
-    #inputs = [WhiteNoise(TIME_SIMULATION * b2.ms)]
-    inputs = [Tone(0.5 * b2.kHz, TIME_SIMULATION * b2.ms, level=70*b2h.dB), Click(duration= TIME_SIMULATION * b2.ms, click_duration=1, level=70*b2h.dB)]
-    #inputs = [HarmonicComplex(i, TIME_SIMULATION * b2.ms) for i in [0.1] * b2.kHz]
-
-        
+    inputs = [
+        Tone(0.5 * b2.kHz, TIME_SIMULATION * b2.ms, level),
+        Tone(1.2 * b2.kHz, TIME_SIMULATION * b2.ms, level),
+        Tone(4 * b2.kHz, TIME_SIMULATION * b2.ms, level),
+        Tone(16 * b2.kHz, TIME_SIMULATION * b2.ms, level),
+        WhiteNoise(TIME_SIMULATION * b2.ms),
+        Click(duration= TIME_SIMULATION * b2.ms, click_duration=1, level=level),
+        Click_Train(duration= TIME_SIMULATION * b2.ms, click_duration=1 * b2.ms, interval=9 * b2.ms, level=level),
+    ]
+    inputs = [
+        Tone(0.5 * b2.kHz, TIME_SIMULATION * b2.ms, level)]
     models = [BrainstemModel]
     cochlea_key = ZI_COC_KEY
 
-    p2 = params("subject_2")
-    p2.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 2
-
-    p1 = params("subject_1")
-    p1.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 1
-
-    p3 = params("subject_0")
-    p3.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 0
+    p = params("subject_0")
+    p.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 0
 
     # p2 = TCParam("itd_only")
     # p2.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 'itd_only'
@@ -100,7 +99,7 @@ if __name__ == "__main__":
 #     p6.SYN_WEIGHTS.LNTBCs2MSO = 0
 #     p6.SYN_WEIGHTS.NTBCs2MSO = 0
 
-    params = [p3]
+    params = [p]
 
     num_runs = len(inputs) * len(params)
     current_run = 0
@@ -113,33 +112,39 @@ if __name__ == "__main__":
         curr_ex = f"{Model.key}&{cochlea_key}&{param.key}"
         result_paths = []
         for input in inputs:
+            L_sounds = {}
+            R_sounds = {}
+            gated_sound_global = None
             start = timer()
             ex_key = create_execution_key(input, cochlea_key, param.key)
-            logger.info(f">>>>> now testing arch n.{current_run+1} of {num_runs}")
+            logger.info(f">>>>> Now testing arch n.{current_run+1} of {num_runs}")
             angle_to_rate = {}
-            for angle in tqdm(ANGLES, "⮡ angles"):
+            for angle in tqdm(ANGLES, "⮡ Angles"):
                 nest.ResetKernel()
                 nest.SetKernelStatus(param.CONFIG.NEST_KERNEL_PARAMS)
 
                 logger.info(f"starting trial for {angle}")
                 # this section is cached on disk
                 anf = load_anf_response(input, angle, cochlea_key, param.cochlea)
+                L_sounds[angle] = anf.l_hrtf_sound
+                R_sounds[angle] = anf.r_hrtf_sound
+                if gated_sound_global is None:
+                    gated_sound_global = anf.gated_sound
                 logger.info("ANF loaded. Creating model...")
 
                 model = Model(param, anf)
-                logger.info("model created. starting simulation...")
                 model.simulate(TIME_SIMULATION)
 
                 model_result = model.analyze()
                 logger.debug(
-                    f"leftMSO is spiking at {len(model_result['L']['MSO']['times'])/TIME_SIMULATION*1000}Hz"
+                    f"Left MSO is spiking at {len(model_result['L']['MSO']['times'])/TIME_SIMULATION*1000}Hz"
                 )
                 angle_to_rate[angle] = model_result
-                logger.info("trial complete.")
+                logger.info("Trial Complete.")
 
-            logger.info(f"saving all angles for model {ex_key}...")
+            logger.info(f"Saving all angles for model {ex_key}...")
             # save model results to file
-            filename = f"{ex_key}.pic"
+            filename = f"{ex_key}_new.pic"
             result_file = result_dir / filename
             result_paths.append(result_file)
 
@@ -149,6 +154,9 @@ if __name__ == "__main__":
             times[ex_key] = timetaken
             create_save_result_object(
                 input,
+                gated_sound_global,
+                L_sounds,
+                R_sounds,
                 angle_to_rate,
                 model,
                 param,

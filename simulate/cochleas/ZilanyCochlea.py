@@ -72,16 +72,9 @@ def resample_binaural_sound(binaural_sound: Sound):
 # =============================================================================
 
 @memory.cache
-def sound_to_spikes(
-    sound: Union[Sound, Tone, ToneBurst],  # <-- ✅ FIXED HERE
-    angle,
-    params: dict,
-    plot_spikes=False
-) -> AnfResponse:
-    """
-    Generate auditory nerve spike trains using the Zilany et al. (2014) cochlea model.
-    Replaces the TanCarney + ZhangSynapse Brian2Hears model.
-    """
+def sound_to_spikes(sound, angle, params, plot_spikes=False) -> AnfResponse:
+
+    logger.info(f"[sound_to_spikes] Generating ANF spikes for angle={angle} params={params}")
 
     hrtf_params = params["hrtf_params"]
     rng_seed = params["rng_seed"]
@@ -89,35 +82,35 @@ def sound_to_spikes(
     coch_par = params.get("cochlea_params", {})
     seed(rng_seed)
 
+    # --- 1. HRTF ---
     logger.debug(f"Generating spikes for {sound=} {angle=} {plot_spikes=} {hrtf_params=}")
+    logger.debug("[sound_to_spikes] Running HRTF...")
+    binaural_raw, gated_sound = run_hrtf(sound, angle, hrtf_params)
 
-    # --- 1. HRTF & Noise ---
-    binaural = run_hrtf(sound, angle, hrtf_params)
-    logger.debug(f"Binaural sound post-HRTF level={binaural.level}")
-    noise = Sound.whitenoise(binaural.duration).atlevel(noise_level)
-    binaural_sound = resample_binaural_sound(binaural + noise)
-    logger.debug(f"Binaural sound post noise level={binaural.level}")
+    # --- 2. Add noise ---
+    logger.debug(f"Binaural sound post-HRTF level={binaural_raw.level}")
+    noise = Sound.whitenoise(binaural_raw.duration).atlevel(noise_level)
+    binaural_sound = resample_binaural_sound(binaural_raw + noise)
 
-    # --- 2. Prepare input signals ---
-    left_data = np.asarray(binaural_sound.left)[:,0]
-    right_data = np.asarray(binaural_sound.right)[:,0]
+    L_sound = binaural_sound.left
+    R_sound = binaural_sound.right
+
+    left_data = np.asarray(L_sound)[:,0]
+    right_data = np.asarray(R_sound)[:,0]
     fs = float(binaural_sound.samplerate / Hz)
-
 
     cf = (CFMIN/Hz, CFMAX/Hz, NUM_CF)
     binaural_IHC_response = {}
-    logger.info("Generating simulated ANF spikes using Zilany model...")
+    logger.info("[sound_to_spikes]Generating simulated ANF spikes using Zilany model...")
 
-    # --- 3. Run Zilany model for each ear ---
     for channel, data in zip(["L", "R"], [left_data, right_data]):
-        logger.debug(f"Running Zilany model for {channel} ear...")
-
+        logger.debug(f"[sound_to_spikes] Running Zilany model for {channel} ear...")
         anf = cochlea.run_zilany2014(
-        data,
-        fs,
-        cf=cf,
-        seed=rng_seed,
-        **coch_par
+            data,
+            fs,
+            cf=cf,
+            seed=rng_seed,
+            **coch_par
         )
 
         # Collect spikes
@@ -135,7 +128,11 @@ def sound_to_spikes(
             plt.tight_layout()
             plt.show()
 
-    logger.info("Zilany spike generation complete.")
+    logger.info("[sound_to_spikes] Zilany spike generation complete.")
 
-    # --- 4. Return wrapped result ---
-    return AnfResponse(binaural_IHC_response, binaural_sound.left, binaural_sound.right)
+    return AnfResponse(
+        binaural_anf_spiketrain=binaural_IHC_response,
+        gated_sound=gated_sound,
+        l_hrtf_sound=L_sound,
+        r_hrtf_sound=R_sound
+    )
