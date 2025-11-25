@@ -82,9 +82,7 @@ class Click:
         else:
             c = b2h.click(click_duration, self.peak)
             click_duration_ms = click_duration*(1/(c.samplerate / b2.Hz))*1000*b2.ms
-            print(click_duration_ms)
             i = b2h.silence(duration - click_duration_ms)
-            print(i)
         p = c + i
         self.sound = p
 
