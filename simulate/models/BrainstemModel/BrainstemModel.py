@@ -35,72 +35,140 @@ class BrainstemModel(SpikingModel):
         self.pops = {"L": {}, "R": {}}
         self.recs = {"L": {}, "R": {}}
 
+        # Reversal potentials shared across SOC
+        EXC_REV = 0.0
+        INH_REV = -75.0
+
         for side in ["L", "R"]:
+
+            # ------------------------------------------------------
+            # ANFs + parrots
+            # ------------------------------------------------------
             self.pops[side]["ANF"] = anfs_per_ear[side]
             self.pops[side]["parrot_ANF"] = nest.Create(
                 "parrot_neuron", len(self.pops[side]["ANF"])
             )
+
+            # ------------------------------------------------------
+            # SBC
+            # ------------------------------------------------------
             self.pops[side]["SBC"] = nest.Create(
                 "iaf_cond_beta",
                 P.n_SBCs,
                 params={
                     "C_m": P.MEMB_CAPS.SBC,
-                    "V_reset": P.V_reset,
                     "g_L": P.G_LEAK.SBC,
+                    "E_L": P.V_m,                 # 🟢 NEW
+                    "V_m": P.V_m,                 # 🟢 NEW
+                    "V_reset": P.V_reset,
+                    "V_th": P.V_TH.SBC,           # 🟢 NEW
+                    "t_ref": P.T_REF.SBC,         # 🟢 NEW
+                    "E_ex": EXC_REV,              # 🟢 NEW
+                    "E_in": INH_REV,              # 🟢 NEW
                 },
             )
+
+            # ------------------------------------------------------
+            # GBC
+            # ------------------------------------------------------
             self.pops[side]["GBC"] = nest.Create(
                 "iaf_cond_beta",
                 P.n_GBCs,
                 params={
                     "C_m": P.MEMB_CAPS.GBC,
-                    "V_reset": P.V_reset,
                     "g_L": P.G_LEAK.GBC,
-                    # "t_ref": 3,
+                    "E_L": P.V_m,                 # 🟢 NEW
+                    "V_m": P.V_m,                 # 🟢 NEW
+                    "V_reset": P.V_reset,
+                    "V_th": P.V_TH.GBC,           # 🟢 NEW
+                    "t_ref": P.T_REF.GBC,         # 🟢 NEW
+                    "E_ex": EXC_REV,              # 🟢 NEW
+                    "E_in": INH_REV,              # 🟢 NEW
                 },
             )
+
+            # ------------------------------------------------------
+            # LNTB inhibitory cells
+            # ------------------------------------------------------
             self.pops[side]["LNTBC"] = nest.Create(
                 "iaf_cond_beta",
                 P.n_GBCs,
                 params={
                     "C_m": P.MEMB_CAPS.LNTBC,
-                    "V_reset": P.V_reset,
                     "g_L": P.G_LEAK.LNTBC,
+                    "E_L": P.V_m,                  # 🟢 NEW
+                    "V_m": P.V_m,                  # 🟢 NEW
+                    "V_reset": P.V_reset,
+                    "V_th": P.V_TH.LNTBC,          # 🟢 NEW
+                    "t_ref": P.T_REF.LNTBC,        # 🟢 NEW
+                    "E_ex": EXC_REV,               # 🟢 NEW
+                    "E_in": INH_REV,               # 🟢 NEW
                 },
             )
+
+            # ------------------------------------------------------
+            # MNTB principal neurons (calyx)
+            # ------------------------------------------------------
             self.pops[side]["MNTBC"] = nest.Create(
                 "iaf_cond_beta",
                 P.n_GBCs,
                 params={
                     "C_m": P.MEMB_CAPS.MNTBC,
-                    "V_reset": P.V_reset,
                     "g_L": P.G_LEAK.MNTBC,
+                    "E_L": P.V_m,                  # 🟢 NEW
+                    "V_m": P.V_m,                  # 🟢 NEW
+                    "V_reset": P.V_reset,
+                    "V_th": P.V_TH.MNTBC,          # 🟢 NEW
+                    "t_ref": P.T_REF.MNTBC,        # 🟢 NEW
+                    "E_ex": EXC_REV,               # 🟢 NEW
+                    "E_in": INH_REV,               # 🟢 NEW
                 },
             )
+
+            # ------------------------------------------------------
+            # MSO coincidence detector
+            # ------------------------------------------------------
             self.pops[side]["MSO"] = nest.Create(
                 "iaf_cond_beta",
                 P.n_MSOs,
                 params={
                     "C_m": P.MEMB_CAPS.MSO,
-                    "tau_rise_ex": P.MSO_TAUS.rise_ex,
-                    "tau_rise_in": P.MSO_TAUS.rise_in,
-                    "tau_decay_ex": P.MSO_TAUS.decay_ex,
-                    "tau_decay_in": P.MSO_TAUS.decay_in,
-                    "V_reset": P.V_reset,
                     "g_L": P.G_LEAK.MSO,
+                    "E_L": P.V_m,                  # 🟢 NEW
+                    "V_m": P.V_m,                  # 🟢 NEW
+                    "V_reset": P.V_reset,
+                    "V_th": P.V_TH.MSO,            # 🟢 NEW
+                    "t_ref": P.T_REF.MSO,          # 🟢 NEW
+                    "E_ex": EXC_REV,               # 🟢 NEW
+                    "E_in": INH_REV,               # 🟢 NEW
+
+                    # MSO synaptic time constants
+                    #"tau_rise_ex": P.MSO_TAUS.rise_ex,
+                    #"tau_rise_in": P.MSO_TAUS.rise_in,
+                    #"tau_decay_ex": P.MSO_TAUS.decay_ex,
+                    #"tau_decay_in": P.MSO_TAUS.decay_in,
                 },
             )
+
+            # ------------------------------------------------------
+            # LSO (EI comparator)
+            # ------------------------------------------------------
             self.pops[side]["LSO"] = nest.Create(
                 "iaf_cond_beta",
                 P.n_LSOs,
                 params={
                     "C_m": P.MEMB_CAPS.LSO,
-                    "V_m": P.V_m,
-                    "V_reset": P.V_reset,
                     "g_L": P.G_LEAK.LSO,
+                    "E_L": P.V_m,                  # 🟢 NEW
+                    "V_m": P.V_m,                  # 🟢 NEW
+                    "V_reset": P.V_reset,
+                    "V_th": P.V_TH.LSO,            # 🟢 NEW
+                    "t_ref": P.T_REF.LSO,          # 🟢 NEW
+                    "E_ex": EXC_REV,               # 🟢 NEW
+                    "E_in": INH_REV,               # 🟢 NEW
                 },
             )
-            
+                
         for side in ["L", "R"]:
             for pop in self.pops[side].keys():
                 self.recs[side][pop] = nest.Create("spike_recorder")
@@ -302,7 +370,7 @@ class BrainstemModel(SpikingModel):
 
     def simulate(self, time: Union[float, int]):
         # split in time chunks
-        TIME_PER_CHUNK_TQDM = 100
+        TIME_PER_CHUNK_TQDM = 50
         chunks = time // TIME_PER_CHUNK_TQDM
         logger.debug(
             f"running simulation for {chunks} chunks of {TIME_PER_CHUNK_TQDM}ms each"
