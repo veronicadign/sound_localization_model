@@ -22,7 +22,7 @@ class Parameters:
                 },
                 "TanCarney": {
                     "hrtf_params": {
-                        "subj_number": 1,
+                        "subj_number": 0,
                         "itd_remove_strategy": ITD_REMOVAL_STRAT.ESTIMATE_FROM_HRTF,
                         "apply_gating": True,
                         "ramp_ms": 10,
@@ -33,18 +33,18 @@ class Parameters:
                 },
                 "Zilany": {
                     "hrtf_params": {
-                        "subj_number": 1,
+                        "subj_number": 0,
                         "itd_remove_strategy": ITD_REMOVAL_STRAT.ESTIMATE_FROM_HRTF,
                         "apply_gating": True,
                         "ramp_ms": 10,
                     },
                     "cochlea_params": {
-                        "anf_num": (10, 0, 0),          # Example fiber counts (HSR, MSR, LSR)           # Example Greenwood parameters (min_cf, max_cf, num_cf)
-                        "species": "human",                # 'cat', 'human', or 'human_glasberg1990'
-                        "cohc": 1.0,                       # Outer hair cell health (0–1)
-                        "cihc": 1.0,                       # Inner hair cell health (0–1)
-                        "powerlaw": "approximate",         # or 'actual'
-                        "ffGn": False                      # Factorial Gaussian noise disabled
+                        "anf_num": (6, 2, 2),            # Example fiber counts (HSR, MSR, LSR)
+                        "species": "human",
+                        "cohc": 1.0,
+                        "cihc": 1.0,
+                        "powerlaw": "approximate",
+                        "ffGn": False
                     },
                     "rng_seed": 42,
                     "omni_noise_level": 0,
@@ -53,14 +53,140 @@ class Parameters:
         )
     )
 
+    # ------------------------------------------------------------
+    # --- GLOBAL membrane & voltage parameters -------------------
+    # ------------------------------------------------------------
+    n_ANFs: int = 35000
+    V_m: float = -65.0       # 🟢 UPDATED (was -70.0)
+    # Physiologically realistic resting potential for CN/MSO neurons ~−60…−65 mV
+    V_reset: float = -67.0   # 🟢 UPDATED (was same as V_m)
+    # Slightly below rest to mimic brief after-hyperpolarization
+
+    # ------------------------------------------------------------
+    # --- Population counts --------------------------------------
+    # ------------------------------------------------------------
+    @dataclass
+    class POP_CONN:
+        ANFs2SBCs: int = 4
+        ANFs2GBCs: int = 20
+
+    SBCs2MSOs: int = int(POP_CONN.ANFs2GBCs / POP_CONN.ANFs2SBCs)
+    SBCs2LSOs: int = int(POP_CONN.ANFs2GBCs / POP_CONN.ANFs2SBCs)
+    n_SBCs: int = int(n_ANFs / POP_CONN.ANFs2SBCs)
+    n_GBCs: int = int(n_ANFs / POP_CONN.ANFs2GBCs)
+    n_MSOs: int = n_GBCs
+    n_LSOs: int = n_GBCs
+    n_inhMSOs: int = n_GBCs
+
+    # ------------------------------------------------------------
+    # --- Delays (ms) --------------------------------------------
+    # ------------------------------------------------------------
+    @dataclass
+    class DELAYS:
+        GBCs2MNTBCs: float = 0.45
+        GBCs2LNTBCs: float = 0.45
+        SBCs2MSO_exc_ipsi: float = 2.0
+        SBCs2MSO_exc_contra: float = 2.0
+
+        def __init__(self):
+            self._DELTA_IPSI: float = 0.2
+            self._DELTA_CONTRA: float = -0.4
+
+        @property
+        def DELTA_IPSI(self): return self._DELTA_IPSI
+        @DELTA_IPSI.setter
+        def DELTA_IPSI(self, value): self._DELTA_IPSI = value
+
+        @property
+        def DELTA_CONTRA(self): return self._DELTA_CONTRA
+        @DELTA_CONTRA.setter
+        def DELTA_CONTRA(self, value): self._DELTA_CONTRA = value
+
+        @property
+        def LNTBCs2MSO_inh_ipsi(self): return 1.44 + self.DELTA_IPSI
+        @property
+        def MNTBCs2MSO_inh_contra(self): return 1.44 + self.DELTA_CONTRA
+
+    # ------------------------------------------------------------
+    # --- Synaptic time constants (ms) ----------------------------
+    # ------------------------------------------------------------
+    @dataclass
+    class MSO_TAUS:
+        rise_ex: float = 0.12   # 🟢 UPDATED (was 0.2)  — fast AMPA
+        rise_in: float = 0.3    # 🟢 UPDATED (was 0.2)  — glycinergic
+        decay_ex: float = 0.35  # 🟢 UPDATED (was 0.5)
+        decay_in: float = 4.0   # 🟢 UPDATED (was 1.5) -> can be shortened more
+
+    # ------------------------------------------------------------
+    # --- Synaptic weights (nS or relative units) -----------------
+    # ------------------------------------------------------------
+    @dataclass
+    class SYN_WEIGHTS:
+        ANFs2SBCs: float = 35.0      # same
+        ANFs2GBCs: float = 7.0       # same
+        GBCs2LNTBCs: float = 20.0
+        GBCs2MNTBCs: float = 30.0
+        SBCs2LSO: float = 8.0        # same
+        MNTBCs2LSO: float = -20.0 
+        MNTBCs2MSO: float = -12.0 # 🟢 UPDATED (was -40) 
+        LNTBCs2MSO: float = -12.0 # 🟢 UPDATED (was -40) 
+        SBCs2MSO: float = 12.0  # 🟢 UPDATED (was +9) 
+
+    # ------------------------------------------------------------
+    # --- Membrane capacitances (pF) ------------------------------
+    # ------------------------------------------------------------
+    @dataclass
+    class MEMB_CAPS:
+        SBC: float = 30.0    # 🟢 UPDATED (was 15) — typical SBC soma 20–40 pF
+        GBC: float = 40.0    # 🟢 UPDATED (was 15)
+        MNTBC: float = 25.0  # 🟢 UPDATED (was 15)
+        LNTBC: float = 25.0  # 🟢 UPDATED (was 15)
+        MSO: float = 20.0    # ✅ kept (literature 15–25 pF)
+        LSO: float = 35.0    # 🟢 UPDATED (was 30)
+
+    # ------------------------------------------------------------
+    # --- Leak conductances (nS) ---------------------------------
+    # ------------------------------------------------------------
+    @dataclass
+    class G_LEAK:
+        SBC: float = 20.0   # 🟢 UPDATED (was 40) τm≈1.5 ms with C=30 pF
+        GBC: float = 20.0   # 🟢 UPDATED (was 25) τm≈2 ms
+        LNTBC: float = 20.0 # 🟢 UPDATED (was 25)
+        MNTBC: float = 12.0 # 🟢 UPDATED (was 25) τm≈2 ms, fast relay
+        MSO: float = 57.0   # 🟢 UPDATED (was 80) τm≈0.35 ms, fits physiology
+        LSO: float = 8.75   # 🟢 UPDATED (was 20) τm≈4 ms (C=35 pF)
+
+    # ------------------------------------------------------------
+    # --- NEW: POPULATION-SPECIFIC THRESHOLDS ---------------------
+    # ------------------------------------------------------------
+    @dataclass
+    class V_TH:
+        SBC: float = -42.0     # 🟢 NEW — bushy cells fire ~-40/-45
+        GBC: float = -40.0     # 🟢 NEW — globular are slightly lower
+        LNTBC: float = -45.0   # 🟢 NEW — inhibitory interneurons
+        MNTBC: float = -45.0   # 🟢 NEW — fast relay
+        MSO: float = -38.0     # 🟢 NEW — MSO threshold ~ -35/-40
+        LSO: float = -45.0     # 🟢 NEW — LSO principal cells
+
+    # ------------------------------------------------------------
+    # --- NEW: POPULATION-SPECIFIC REFRACTORY PERIODS (ms) -------
+    # ------------------------------------------------------------
+    @dataclass
+    class T_REF:
+        SBC: float = 0.5       # 🟢 NEW — bushy cells recover fast
+        GBC: float = 0.5       # 🟢 NEW
+        LNTBC: float = 0.5     # 🟢 NEW
+        MNTBC: float = 0.5     # 🟢 NEW — calyx relay is fast
+        MSO: float = 0.2       # 🟢 NEW — sub-ms integration window
+        LSO: float = 1.0       # 🟢 NEW — LSO slower membrane
+
+
+    # ------------------------------------------------------------
+    # --- System / kernel configuration ---------------------------
+    # ------------------------------------------------------------
     @dataclass
     class CONFIG:
-        STORE_POPS: set = field(
-            default_factory=lambda: set(
-                # ["LSO", "MSO", "ANF", "SBC", "GBC", "LNTBC", "MNTBC"]
-                []  # all
-            )
-        )
+        STORE_POPS: set = field(default_factory=lambda: set([]))
         NEST_KERNEL_PARAMS: dict = field(
             default_factory=lambda: {
                 "resolution": 0.1,
@@ -69,115 +195,10 @@ class Parameters:
             }
         )
 
-    @dataclass
-    class POP_CONN:
-        ANFs2SBCs: int = 4
-        ANFs2GBCs: int = 20
-
-    @dataclass
-    class DELAYS:  # ms
-        GBCs2MNTBCs: float = 0.45
-        GBCs2LNTBCs: float = 0.45
-        SBCs2MSO_exc_ipsi: float = 2
-        SBCs2MSO_exc_contra: float = 2
-
-        def __init__(self):
-            self._DELTA_IPSI: float = 0.2
-            self._DELTA_CONTRA: float = -0.4
-
-        @property
-        def DELTA_IPSI(self):
-            return self._DELTA_IPSI
-
-        @DELTA_IPSI.setter
-        def DELTA_IPSI(self, value):
-            self._DELTA_IPSI = value
-
-        @property
-        def DELTA_CONTRA(self):
-            return self._DELTA_CONTRA
-
-        @DELTA_CONTRA.setter
-        def DELTA_CONTRA(self, value):
-            self._DELTA_CONTRA = value
-
-        @property
-        def LNTBCs2MSO_inh_ipsi(self):
-            return 1.44 + self.DELTA_IPSI
-
-        @property
-        def MNTBCs2MSO_inh_contra(self):
-            return 1.44 + self.DELTA_CONTRA
-
-        # DELTA_IPSI: float = 0.2
-        # DELTA_CONTRA: float = -0.4
-        # GBCs2MNTBCs: float = 0.45
-        # GBCs2LNTBCs: float = 0.45
-        # SBCs2MSO_exc_ipsi: float = 2  # MSO ipsilateral excitation
-        # SBCs2MSO_exc_contra: float = 2  # MSO contralateral excitation
-        # LNTBCs2MSO_inh_ipsi: float = (
-        #     1.44 + DELTA_IPSI
-        # )  # MSO ipsilateral inhibition (mirrors SBC)
-        # MNTBCs2MSO_inh_contra: float = (
-        #     1.44 + DELTA_CONTRA
-        # )  # MSO contralateral inhibition
-
-    @dataclass
-    class MSO_TAUS:
-        rise_ex: float = 0.2
-        rise_in: float = 0.2
-        decay_ex: float = 0.5
-        decay_in: float = 1.5
-
-    n_ANFs: int = 35000
-    SBCs2MSOs: int = int(POP_CONN.ANFs2GBCs / POP_CONN.ANFs2SBCs)
-    SBCs2LSOs: int = int(POP_CONN.ANFs2GBCs / POP_CONN.ANFs2SBCs)
-    n_SBCs: int = int(n_ANFs / POP_CONN.ANFs2SBCs)
-    n_GBCs: int = int(n_ANFs / POP_CONN.ANFs2GBCs)
-    n_MSOs: int = n_GBCs
-    n_LSOs: int = n_GBCs
-    n_inhMSOs: int = n_GBCs
-    V_m: float = -70  # mV
-    V_reset: float = V_m
-
-    @dataclass
-    class SYN_WEIGHTS:
-        ANFs2SBCs: float = 35.0
-        ANFs2GBCs: float = 7.0
-        GBCs2LNTBCs: float = 20.0
-        GBCs2MNTBCs: float = 30.0
-        SBCs2LSO: float = 8.0 #5
-        MNTBCs2LSO: float = -20.0
-        MNTBCs2MSO: float = -40.0
-        LNTBCs2MSO: float = -40.0
-        SBCs2MSO: float = 9.0
-
-    @dataclass
-    class MEMB_CAPS:
-        # default: float = 250
-        SBC: int = 15
-        GBC: int = 15
-        MNTBC: int = 15
-        LNTBC: int = 15
-        MSO: float = 20
-        LSO: float = 30
-        # default leak conductance (g_L) at 16.6667 nS gives with C_m = 1 pF:
-        # Membrane time constant τ = C_m/g_L ≈ 0.06 ms
-        # if C_m = 15 pF => τ ≈ 0.9 ms
-
-    @dataclass
-    class G_LEAK:
-        # default: float = 16.67
-        SBC: int = 40
-        GBC: int = 25
-        LNTBC: int = 25
-        MNTBC: int = 25
-        MSO: float = 80
-        LSO: float = 20
-
+    # ------------------------------------------------------------
+    # --- Post-init to instantiate nested dataclasses -------------
+    # ------------------------------------------------------------
     def __post_init__(self):
-        # horrible, but i need each to be an instance so that changes
-        # aren't propagated to other instances of Parameters class. it truly is horrifying. sorry
         self.CONFIG = self.CONFIG()
         self.DELAYS = self.DELAYS()
         self.SYN_WEIGHTS = self.SYN_WEIGHTS()
@@ -185,7 +206,6 @@ class Parameters:
         self.MSO_TAUS = self.MSO_TAUS()
         self.MEMB_CAPS = self.MEMB_CAPS()
         self.G_LEAK = self.G_LEAK()
-
 
 """
 iaf_cond_alpha default params
