@@ -49,7 +49,7 @@ def create_save_result_object(
     result["conf"] = save_current_conf(
         model, param, cochlea_key, create_sound_key(input)
     )
-    logger.info(f"\tSaving results for {ex_key} to {result_file.absolute()}...")
+    logger.info(f"\tSaving results to {result_file.absolute()}...")
     with open(result_file, "wb") as f:
         dill.dump(result, f)
     del result
@@ -58,24 +58,30 @@ def create_save_result_object(
 if __name__ == "__main__":
 
     TIME_SIMULATION = 250
-    level = 90 * b2h.dB
+    LEVEL = 80
 
     inputs = [
-        Tone(0.5 * b2.kHz, TIME_SIMULATION * b2.ms, level),
-        Tone(1.2 * b2.kHz, TIME_SIMULATION * b2.ms, level),
-        Tone(4 * b2.kHz, TIME_SIMULATION * b2.ms, level),
-        Tone(16 * b2.kHz, TIME_SIMULATION * b2.ms, level),
-        WhiteNoise(TIME_SIMULATION * b2.ms),
-        Click(duration= TIME_SIMULATION * b2.ms, click_duration=1, level=level),
-        Click_Train(duration= TIME_SIMULATION * b2.ms, click_duration=1 * b2.ms, interval=9 * b2.ms, level=level),
+        #Tone(0.5 * b2.kHz, TIME_SIMULATION * b2.ms, LEVEL * b2h.dB),
+        Tone(1.2 * b2.kHz, TIME_SIMULATION * b2.ms, LEVEL * b2h.dB),
+        Tone(4 * b2.kHz, TIME_SIMULATION * b2.ms, LEVEL * b2h.dB),
+        Tone(16 * b2.kHz, TIME_SIMULATION * b2.ms, LEVEL * b2h.dB),
+        WhiteNoise(TIME_SIMULATION * b2.ms, level=LEVEL * b2h.dB),
+        #Click(duration=TIME_SIMULATION * b2.ms, click_duration=1, level=LEVEL * b2h.dB),
+        #Click_Train(duration= TIME_SIMULATION * b2.ms, click_duration=1*b2.ms, interval=4*b2.ms, level=LEVEL * b2h.dB),
     ]
-    inputs = [
-        Tone(0.5 * b2.kHz, TIME_SIMULATION * b2.ms, level)]
+
     models = [BrainstemModel]
     cochlea_key = ZI_COC_KEY
 
-    p = params("subject_0")
-    p.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 0
+    ps = []
+    for s in range(5):
+        p = params(f"subject_{s}")
+        p.cochlea[cochlea_key]['hrtf_params']['subj_number'] = s
+        p.SYN_WEIGHTS.GBCs2LNTBCs = 50 #20
+        p.SYN_WEIGHTS.GBCs2MNTBCs = 50 #30
+        p.SYN_WEIGHTS.SBCs2LSO = 15 #8
+        p.SYN_WEIGHTS.SBCs2MSO = 15 #12
+        ps.append(p)
 
     # p2 = TCParam("itd_only")
     # p2.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 'itd_only'
@@ -99,72 +105,73 @@ if __name__ == "__main__":
 #     p6.SYN_WEIGHTS.LNTBCs2MSO = 0
 #     p6.SYN_WEIGHTS.NTBCs2MSO = 0
 
-    params = [p]
 
-    num_runs = len(inputs) * len(params)
+    num_runs = len(inputs) * len(ps)
     current_run = 0
     logger.info(f"launching {num_runs} trials...")
     times = {}
     result_dir = Path(Paths.RESULTS_DIR)
     trials_pbar = tqdm(total=num_runs, desc="trials")
 
-    for Model, param in zip(models, params):
-        curr_ex = f"{Model.key}&{cochlea_key}&{param.key}"
-        result_paths = []
+    for Model in models:
         for input in inputs:
-            L_sounds = {}
-            R_sounds = {}
-            gated_sound_global = None
-            start = timer()
-            ex_key = create_execution_key(input, cochlea_key, param.key)
-            logger.info(f">>>>> Now testing arch n.{current_run+1} of {num_runs}")
-            angle_to_rate = {}
-            for angle in tqdm(ANGLES, "⮡ Angles"):
-                nest.ResetKernel()
-                nest.SetKernelStatus(param.CONFIG.NEST_KERNEL_PARAMS)
+            for param in ps:
+                curr_ex = f"{Model.key}&{cochlea_key}&{param.key}"
+                result_paths = []
+    
+                L_sounds = {}
+                R_sounds = {}
+                gated_sound_global = None
+                start = timer()
+                ex_key = create_execution_key(input, cochlea_key, param.key)
+                logger.info(f">>>>> Now testing arch n.{current_run+1} of {num_runs}")
+                angle_to_rate = {}
+                for angle in tqdm(ANGLES, "⮡ Angles"):
+                    nest.ResetKernel()
+                    nest.SetKernelStatus(param.CONFIG.NEST_KERNEL_PARAMS)
 
-                logger.info(f"starting trial for {angle}")
-                # this section is cached on disk
-                anf = load_anf_response(input, angle, cochlea_key, param.cochlea)
-                L_sounds[angle] = anf.l_hrtf_sound
-                R_sounds[angle] = anf.r_hrtf_sound
-                if gated_sound_global is None:
-                    gated_sound_global = anf.gated_sound
-                logger.info("ANF loaded. Creating model...")
+                    logger.info(f"starting trial for {angle}")
+                    # this section is cached on disk
+                    anf = load_anf_response(input, angle, cochlea_key, param.cochlea)
+                    L_sounds[angle] = anf.l_hrtf_sound
+                    R_sounds[angle] = anf.r_hrtf_sound
+                    if gated_sound_global is None:
+                        gated_sound_global = anf.gated_sound
+                    logger.info("ANF loaded. Creating model...")
 
-                model = Model(param, anf)
-                model.simulate(TIME_SIMULATION)
+                    model = Model(param, anf)
+                    model.simulate(TIME_SIMULATION)
 
-                model_result = model.analyze()
-                logger.debug(
-                    f"Left MSO is spiking at {len(model_result['L']['MSO']['times'])/TIME_SIMULATION*1000}Hz"
-                )
-                angle_to_rate[angle] = model_result
-                logger.info("Trial Complete.")
+                    model_result = model.analyze()
+                    logger.debug(
+                        f"Left MSO is spiking at {len(model_result['L']['MSO']['times'])/TIME_SIMULATION*1000}Hz"
+                    )
+                    angle_to_rate[angle] = model_result
+                    logger.info("Trial Complete.")
 
-            logger.info(f"Saving all angles for model {ex_key}...")
-            # save model results to file
-            filename = f"{ex_key}_new.pic"
-            result_file = result_dir / filename
-            result_paths.append(result_file)
+                logger.info(f"Saving all angles for model {ex_key}...")
+                # save model results to file
+                filename = f"{ex_key}.pic"
+                result_file = result_dir / filename
+                result_paths.append(result_file)
 
-            end = timer()
-            timetaken = timedelta(seconds=end - start)
-            current_run = current_run + 1
-            times[ex_key] = timetaken
-            create_save_result_object(
-                input,
-                gated_sound_global,
-                L_sounds,
-                R_sounds,
-                angle_to_rate,
-                model,
-                param,
-                cochlea_key,
-                result_file,
-                filename=filename,
-                simulation_time=TIME_SIMULATION,
-                times={"start": start, "end": end, "timetaken": timetaken},
+                end = timer()
+                timetaken = timedelta(seconds=end - start)
+                current_run = current_run + 1
+                times[ex_key] = timetaken
+                create_save_result_object(
+                    input,
+                    gated_sound_global,
+                    L_sounds,
+                    R_sounds,
+                    angle_to_rate,
+                    model,
+                    param,
+                    cochlea_key,
+                    result_file,
+                    filename=filename,
+                    simulation_time=TIME_SIMULATION,
+                    times={"start": start, "end": end, "timetaken": timetaken},
             )
 
     trials_pbar.close()

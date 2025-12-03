@@ -2074,12 +2074,12 @@ def draw_rate_vs_angle(
 
     # Case: all populations
     if pop == "all":
-        pops = ["ANF", "SBC", "GBC", "MNTBC", "MSO", "LSO"]
+        pops = ["SBC", "GBC", "LNTBC", "MNTBC", "MSO", "LSO"]
     else:
         pops = list(pop)
 
-    n_rows = math.ceil(len(pops) / 2)
-    n_cols = 2
+    n_rows = math.ceil(len(pops) / 3)
+    n_cols = 3
 
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(18, 4 * n_rows))
     axes = np.array(axes).flatten()

@@ -4,8 +4,11 @@ from pathlib import Path
 from typing import Union 
 
 
-repo_root = Path(__file__).resolve().parents[3]            # top-level directory (where cochlea-1 lives)
-cochlea_local_path = repo_root / "cochlea-1"
+model_root = Path(__file__).resolve().parents[2]            # top-level directory (where cochlea-1 lives)
+cochlea_local_path = model_root / "external/cochlea-1/"
+
+""" repo_root = Path(__file__).resolve().parents[3]            # top-level directory (where cochlea-1 lives)
+cochlea_local_path = repo_root / "cochlea-1" """
 
 # ---------------------------------------------------------------------
 # 2. Add local cochlea path (so it overrides installed version)
@@ -15,10 +18,10 @@ print(f"✅ Using local cochlea package from: {cochlea_local_path}")
 
 import cochlea  # import it now while path is active
 
-simulate_dir = Path(__file__).resolve().parents[1]
+""" simulate_dir = Path(__file__).resolve().parents[1]
 print(simulate_dir)
 sys.path.insert(0, str(simulate_dir))
-print(f"✅ Using utils from: {simulate_dir}") 
+print(f"✅ Using utils from: {simulate_dir}")  """
 
 from os import makedirs
 import numpy as np

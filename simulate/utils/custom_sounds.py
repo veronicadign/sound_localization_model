@@ -1,5 +1,6 @@
 import brian2 as b2
 import brian2hears as b2h
+import numpy as np
 
 
 DEFAULT_SOUND_DURATION = 25 * b2.ms
@@ -8,6 +9,7 @@ DEFAULT_BURST_REP = 3
 DEFAULT_CLICKS_NUMBER = 10
 DEFAULT_CLICKS_DURATION = 10
 DEFAULT_CLICKS_INTERVAL = 50
+DEFAULT_SEED = 42
 
 
 # i considered subclassing for a bit but i don't know enough
@@ -53,7 +55,8 @@ class ToneBurst:
 class WhiteNoise:
     sound: b2h.Sound
 
-    def __init__(self, duration=DEFAULT_SOUND_DURATION, level=None, **kwargs):
+    def __init__(self, duration=DEFAULT_SOUND_DURATION, level=None, seed=DEFAULT_SEED, **kwargs):
+        np.random.seed(seed)
         self.sound = b2h.Sound.whitenoise(duration, **kwargs)
         if level is not None:
             self.sound.level = level
