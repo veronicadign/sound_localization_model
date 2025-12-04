@@ -2,15 +2,15 @@
 
 This repository contains a biologically grounded computational framework for simulating the human auditory periphery and brainstem for sound localization. It includes peripheral cochlear models (Zilany 2009/2014, Holmberg 2007, Gammatone, Tan–Carney), HRTF preprocessing, spike-train generation, spiking neural networks (LSO/MSO pathways), and plotting utilities.
 
-# Installing
+## Installing
 Clone the repo 'https://github.com/francescodesantis/sound_localization_model/' in your workspace.
 Then ensure that the project main repository contains a directory named logs, used to store simulation and debugging logs.
 
-## External Cochlea Submodule (cochlea-1)
+### External Cochlea Submodule (cochlea-1)
 This project uses a custom fork of the auditory periphery package cochlea-1, included as a Git submodule inside:
 external/cochlea-1
 
-### Initialize the submodule
+#### Initialize the submodule
 
 ```bash
 git submodule update --init --recursive
