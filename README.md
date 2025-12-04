@@ -10,6 +10,7 @@ To create and activate the environment:
 ```bash
 mamba create -n name_env -c conda-forge python=3.9.23 nest-simulator=3.8.0 -f env.yml
 mamba activate name_env
+```bash
 
 ## External Cochlea Submodule (cochlea-1)
 This project uses a custom fork of the auditory periphery package cochlea-1, included as a Git submodule inside:
@@ -22,6 +23,7 @@ git submodule update --init --recursive
 cd external/cochlea-1
 export CFLAGS="-std=c99"
 python setup.py build_ext --inplace
+```bash
 
 After building, cochlea can be imported from anywhere inside this repository:
 from cochlea.zilany2014 import run_zilany2014
