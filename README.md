@@ -2,14 +2,9 @@
 
 This repository contains a biologically grounded computational framework for simulating the human auditory periphery and brainstem for sound localization. It includes peripheral cochlear models (Zilany 2009/2014, Holmberg 2007, Gammatone, Tan–Carney), HRTF preprocessing, spike-train generation, spiking neural networks (LSO/MSO pathways), and plotting utilities.
 
-
-
-## Environment Setup
-To create and activate the environment:
-
-mamba create -n name_env -c conda-forge python=3.9.23 nest-simulator=3.8.0 -f env.yml
-mamba activate name_env
-
+# Installing
+Clone the repo 'https://github.com/francescodesantis/sound_localization_model/' in your workspace.
+Then ensure that the project main repository contains a directory named logs, used to store simulation and debugging logs.
 
 ## External Cochlea Submodule (cochlea-1)
 This project uses a custom fork of the auditory periphery package cochlea-1, included as a Git submodule inside:
@@ -26,6 +21,14 @@ python setup.py build_ext --inplace
 
 After building, cochlea can be imported from anywhere inside this repository:
 from cochlea.zilany2014 import run_zilany2014
+
+## Environment Setup
+To create and activate the environment:
+
+```bash
+mamba create -n name_env -c conda-forge python=3.9.23 nest-simulator=3.8.0 -f env.yml
+mamba activate name_env
+```
 
 ## External Data
 **IRCAM Dataset [HRTFs]**  
