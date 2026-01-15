@@ -254,7 +254,7 @@ def draw_single_angle_histogram(data, angle, population="SBC", fontsize=16, alph
     }
 
     # Create logarithmic bins for frequency
-    bins = greenwood_cf_array(CFMIN/ b2.Hz, CFMAX/ b2.Hz, bin_count)
+    bins = greenwood_cf_array(CFMIN/ b2.Hz, CFMAX/ b2.Hz, bin_count) / b2.Hz
 
     # Process data for histograms
     senders_renamed = {
@@ -271,7 +271,7 @@ def draw_single_angle_histogram(data, angle, population="SBC", fontsize=16, alph
     if max_value > 0:  # Avoid division by zero
         left_hist = left_hist / max_value
         right_hist = right_hist / max_value
-
+    print(bins[0])
     # Plot histograms - note the negative values for left histogram
     ax.bar(
         bins[:-1],
@@ -827,50 +827,77 @@ def draw_psth_pop(
     pop,
     title=None,
     xlim=None,
-    ylim=None,
-    bin_size = 1, #ms
-    color = None,
-    figsize = (7,4)
+    ylim=None,        # CF interval in Hz
+    bin_size=1,       # ms
+    color=None,
+    psth_rate=False,
+    figsize=(7, 4)
 ):
-    spikes = res["angle_to_rate"][angle][side][pop]  
-    spike_times = spikes['times']
-    spike_senders = spikes['senders']
-    num_neurons = len(spikes["global_ids"])
-    cf = greenwood_cf_array(CFMIN/ b2.Hz, CFMAX/ b2.Hz, num_neurons)*b2.Hz
-    duration = res.get("simulation_time", res["basesound"].sound.duration / b2.ms)
+    import matplotlib.pyplot as plt
 
-    if color == None:
-        if side == 'L': color = 'm'
-        elif side == 'R': color = 'g'
+    side_colors = {'L': 'b', 'R': 'g'}
+    color = color if color is not None else side_colors.get(side, 'b')
 
-    if xlim == None: 
-        xlim_array = [0,duration]
-    else: xlim_array = xlim
+    duration = res.get("simulation_time", res["sounds"]["base_sound"].sound.duration / b2.ms)
+    if xlim is None:
+        xlim = [0, duration]
+    if ylim is None:
+        ylim = [CFMIN / Hz, CFMAX / Hz]  # entire population by default
 
-    time_mask = (spike_times >= xlim[0]) & (spike_times <= xlim[1])
-    filtered_times = spike_times[time_mask]
-    filtered_senders = spike_senders[time_mask]
-    # Fix for the error - get indices properly
-    fmin, ymin_idx = take_closest(cf, ylim[0]*Hz)
-    fmax, ymax_idx = take_closest(cf, ylim[1]*Hz)
-    
-    # Convert indices to actual IDs
-    ymin = spikes["global_ids"][0] + ymin_idx
-    ymax = spikes["global_ids"][0] + ymax_idx
-    cluster_mask = (filtered_senders >= ymin) & (filtered_senders <= ymax)
-    cluster_times = filtered_times[cluster_mask]
+    spikes = res["angle_to_rate"][angle][side][pop]
+
+    # -----------------------------
+    # Helper: filter spikes in time & CF interval
+    # -----------------------------
+    def filter_spikes(spikes, xlim, ylim):
+        times = spikes["times"]
+        senders = spikes["senders"]
+        gids = spikes["global_ids"]
+        n_neurons = len(gids)
+
+        # Time filter
+        mask_t = (times >= xlim[0]) & (times <= xlim[1])
+        times_t = times[mask_t]
+        senders_t = senders[mask_t]
+
+        # Map CF interval to neuron indices
+        cf_hz = greenwood_cf_array(CFMIN / b2.Hz, CFMAX / b2.Hz, n_neurons) / b2.Hz
+        _, ymin_idx = take_closest(cf_hz, ylim[0])
+        _, ymax_idx = take_closest(cf_hz, ylim[1])
+
+        cf_min_id = gids[0] + ymin_idx
+        cf_max_id = gids[0] + ymax_idx
+
+        # CF filter
+        mask_cf = (senders_t >= cf_min_id) & (senders_t <= cf_max_id)
+
+        return times_t[mask_cf], senders_t[mask_cf]
+
+    times_f, senders_f = filter_spikes(spikes, xlim, ylim)
+
     bins = np.arange(xlim[0], xlim[1] + bin_size, bin_size)
-    fig, ax = plt.subplots(1, figsize = figsize)
-    ax.hist(cluster_times, bins=bins, alpha=0.7, color = color)
-    ax.set_xlabel('Time (ms)')
-    ax.set_ylabel('Spike Count')
-    ax.grid(True, alpha=0.3)
 
-    # You can add more customization to the axes if needed
+    fig, ax = plt.subplots(1, figsize=figsize)
+
+    if psth_rate:
+        counts, _ = np.histogram(times_f, bins=bins)
+        rates = counts / bin_size * 1000  # convert to Hz
+        ax.plot(bins[:-1], rates, color=color, alpha=0.7)
+        ax.set_ylabel("Firing rate [Hz]")
+    else:
+        ax.hist(times_f, bins=bins, alpha=0.7, color=color)
+        ax.set_ylabel("Spike count")
+
+    ax.set_xlabel("Time [ms]")
+    ax.set_xlim(xlim)
+    ax.grid(True, alpha=0.3)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
+
+    if title:
+        ax.set_title(title)
+    ax.set_yticks([])
     plt.show()
-    return
 
 def calculate_firing_rates(angle_to_rate, pop, sides, angles, duration, cf_interval=None):
     """
@@ -1561,10 +1588,11 @@ def plot_anf_rasterplot(
 
 def plot_sound(
     sound,
-    figsize=(20, 4),
+    figsize=(6, 4),
     title=None,
     time_in_ms=False,
     xlim = None,
+    ylim = None,
     color = 'b'):
     """
     Plot a Brian2Hears Sound object over time.
@@ -1603,13 +1631,14 @@ def plot_sound(
         ax.legend()
 
     ax.set_xlabel(xlabel)
+    ax.set_ylim(ylim)
     ax.set_ylabel("Amplitude")
     if title is None:
         # if original was Tone/ToneBurst, call your naming function
         if not isinstance(sound, b2h.Sound):
             title = create_sound_key(sound)
         else:
-            title = "Sound waveform"
+            title = None
 
     ax.set_title(title)
     if xlim:
@@ -1633,7 +1662,7 @@ def draw_spikes_and_psth_bothside(
     figsize=(14, 16)
 ):
 
-    side_colors = {'L': 'm', 'R': 'g'}
+    side_colors = {'L': 'b', 'R': 'g'}
 
     duration = res.get("simulation_time", res["sounds"]["base_sound"].sound.duration / b2.ms)
     if xlim is None:
@@ -1656,7 +1685,7 @@ def draw_spikes_and_psth_bothside(
     fig = plt.figure(figsize=figsize)
     gs = GridSpec(
         7, 2, figure=fig,
-        width_ratios=[5, 1],
+        width_ratios=[5, 1.5],
         height_ratios=[0.2, 0.2, 0.2, 1, 0.2, 1, 0.8],
         hspace=0.35,
         wspace=0.05,
@@ -1683,9 +1712,9 @@ def draw_spikes_and_psth_bothside(
     ax_sound1.grid(True, alpha=0.3)
 
     # -----------------------------------------------------------------------
-    # ROW 2 — Left HRTF sound
+    # ROW 4 — Left HRTF sound
     # -----------------------------------------------------------------------
-    ax_sound2 = fig.add_subplot(gs[2, 0])
+    ax_sound2 = fig.add_subplot(gs[4, 0])
     t2 = np.arange(len(L_hrtf_sound)) / L_hrtf_sound.samplerate * 1000
     ax_sound2.plot(t2, L_hrtf_sound, color='m', lw=2)
     ax_sound2.set_ylabel("HRTF-L")
@@ -1693,11 +1722,11 @@ def draw_spikes_and_psth_bothside(
     ax_sound2.grid(True, alpha=0.3)
 
     # -----------------------------------------------------------------------
-    # ROW 3 — Right HRTF sound
+    # ROW 2 — Right HRTF sound
     # -----------------------------------------------------------------------
-    ax_sound3 = fig.add_subplot(gs[4, 0])
+    ax_sound3 = fig.add_subplot(gs[2, 0])
     t3 = np.arange(len(R_hrtf_sound)) / R_hrtf_sound.samplerate * 1000
-    ax_sound3.plot(t3, R_hrtf_sound, color='g', lw=2)
+    ax_sound3.plot(t3, R_hrtf_sound, color='b', lw=2)
     ax_sound3.set_ylabel("HRTF-R")
     ax_sound3.set_xlim(xlim)
     ax_sound3.grid(True, alpha=0.3)
@@ -1705,11 +1734,11 @@ def draw_spikes_and_psth_bothside(
     # -----------------------------------------------------------------------
     # Remaining rows identical: Raster L, Raster R, PSTH
     # -----------------------------------------------------------------------
-    ax_raster_L = fig.add_subplot(gs[3, 0])
-    ax_hist_L   = fig.add_subplot(gs[3, 1], sharey=ax_raster_L)
+    ax_raster_L = fig.add_subplot(gs[5, 0])
+    ax_hist_L   = fig.add_subplot(gs[5, 1], sharey=ax_raster_L)
 
-    ax_raster_R = fig.add_subplot(gs[5, 0])
-    ax_hist_R   = fig.add_subplot(gs[5, 1], sharey=ax_raster_R)
+    ax_raster_R = fig.add_subplot(gs[3, 0])
+    ax_hist_R   = fig.add_subplot(gs[3, 1], sharey=ax_raster_R)
 
     ax_psth     = fig.add_subplot(gs[6, 0], sharex=ax_raster_L)
 
@@ -1806,7 +1835,7 @@ def draw_spikes_and_psth_bothside(
         # Convert spike counts → firing rate
         if psth_rate:
             grouped_values = (grouped_counts / bin_size) * 1000.0  # Hz
-            xlabel = "Firing rate [Hz]"
+            xlabel = "Firing rate [Hz]  "
         else:
             grouped_values = grouped_counts
             xlabel = "Spike count"
