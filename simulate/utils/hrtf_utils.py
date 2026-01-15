@@ -18,7 +18,7 @@ from scipy.fft import rfft, irfft
 import matplotlib.pyplot as plt
 
 
-def apply_gating(sound: Sound, ramp_ms: float = 5.0) -> Sound:
+def apply_gating(sound: Sound, ramp_ms: float = 10.0) -> Sound:
     """
     Apply raised-cosine (Hann) onset/offset gating to a Brian2Hears Sound.
 

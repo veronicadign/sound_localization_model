@@ -22,7 +22,7 @@ from utils.log_utils import logger
 from utils.manual_fixes_to_b2h.HeadlessDatabase import HeadlessDatabase
 
 from utils.cochlea_utils import (
-    ANGLE_TO_IRCAM,
+    ANGLE_TO_SOFA,
     CFMAX,
     CFMIN,
     ITD_REMOVAL_STRAT,

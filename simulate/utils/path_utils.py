@@ -6,7 +6,7 @@ from inspect import isfunction
 class Paths:
     DATA_DIR: str = "../data/"
     IRCAM_DIR: str = DATA_DIR + "IRCAM/"
-    SOFA_DIR: str = DATA_DIR + "SOFA/"
+    SOFA_DIR: str = DATA_DIR + "SOFA/IRCAM/"
     ANF_SPIKES_DIR: str = DATA_DIR + "ANF_SPIKETRAINS/"
     RESULTS_DIR: str = "../results/"
 
