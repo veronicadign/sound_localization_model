@@ -13,7 +13,7 @@ from cochleas.TanCarneyCochlea import sound_to_spikes as tc_cochlea
 from cochleas.ZilanyCochlea import COCHLEA_KEY as ZI_COC_KEY
 from cochleas.ZilanyCochlea import sound_to_spikes as zi_cochlea
 
-from utils.cochlea_utils import ANGLES, IRCAM_HRTF_ANGLES, NUM_ANF_PER_HC, NUM_CF, AnfResponse
+from utils.cochlea_utils import ANGLES, NUM_ANF_PER_HC, NUM_CF, AnfResponse
 import nest
 
 
@@ -38,6 +38,10 @@ def create_sound_key(sound):
         add_info = str(sound.frequency).replace(" ", "")
         level = int(sound.sound.level)
         sound_type = "toneburst"
+    elif type(sound) is ToneWithSilence:
+        add_info = str(sound.frequency).replace(" ", "")
+        level = int(sound.sound.level)
+        sound_type = "tone_with_silence"
     elif type(sound) is WhiteNoise:
         sound_type = "whitenoise"
         level = int(sound.sound.level)

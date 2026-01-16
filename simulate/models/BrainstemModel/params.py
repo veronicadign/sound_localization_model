@@ -35,8 +35,6 @@ class Parameters:
                     "hrtf_params": {
                         "subj_number": 0,
                         "itd_remove_strategy": ITD_REMOVAL_STRAT.ESTIMATE_FROM_HRTF,
-                        "apply_gating": True,
-                        "ramp_ms": 10,
                     },
                     "cochlea_params": {
                         "anf_num": (6, 2, 2),            # Example fiber counts (HSR, MSR, LSR)

@@ -58,32 +58,30 @@ def create_save_result_object(
 if __name__ == "__main__":
 
     TIME_SIMULATION = 250
-    LEVEL = 80
+    LEVEL = 90
 
     inputs = [
-        #Tone(0.5 * b2.kHz, TIME_SIMULATION * b2.ms, LEVEL * b2h.dB),
-        Tone(1.2 * b2.kHz, TIME_SIMULATION * b2.ms, LEVEL * b2h.dB),
-        Tone(4 * b2.kHz, TIME_SIMULATION * b2.ms, LEVEL * b2h.dB),
-        Tone(16 * b2.kHz, TIME_SIMULATION * b2.ms, LEVEL * b2h.dB),
-        WhiteNoise(TIME_SIMULATION * b2.ms, level=LEVEL * b2h.dB),
-        #Click(duration=TIME_SIMULATION * b2.ms, click_duration=1, level=LEVEL * b2h.dB),
-        #Click_Train(duration= TIME_SIMULATION * b2.ms, click_duration=1*b2.ms, interval=4*b2.ms, level=LEVEL * b2h.dB),
+        Tone(0.5 * b2.kHz, duration=200 * b2.ms, level=LEVEL * b2h.dB, ramp_ms=10, offset_silence_duration=200 * b2.ms)
+        # Tone(0.5 * b2.kHz, TIME_SIMULATION * b2.ms, LEVEL * b2h.dB),
+        # Tone(1.2 * b2.kHz, TIME_SIMULATION * b2.ms, LEVEL * b2h.dB),
+    #     Tone(4 * b2.kHz, TIME_SIMULATION * b2.ms, LEVEL * b2h.dB),
+    #     Tone(16 * b2.kHz, TIME_SIMULATION * b2.ms, LEVEL * b2h.dB),
+    #     WhiteNoise(TIME_SIMULATION * b2.ms, level=LEVEL * b2h.dB),
+    #     Click(duration=TIME_SIMULATION * b2.ms, click_duration=1, level=LEVEL * b2h.dB),
+    #     Click_Train(duration= TIME_SIMULATION * b2.ms, click_duration=1*b2.ms, interval=4*b2.ms, level=LEVEL * b2h.dB),
     ]
 
     models = [BrainstemModel]
     cochlea_key = ZI_COC_KEY
 
     ps = []
-    for s in range(5):
+    for s in range(1):
         p = params(f"subject_{s}")
         p.cochlea[cochlea_key]['hrtf_params']['subj_number'] = s
-        p.SYN_WEIGHTS.GBCs2LNTBCs = 50 #20
-        p.SYN_WEIGHTS.GBCs2MNTBCs = 50 #30
-        p.SYN_WEIGHTS.SBCs2LSO = 15 #8
-        p.SYN_WEIGHTS.SBCs2MSO = 15 #12
         ps.append(p)
 
-    # p2 = TCParam("itd_only")
+
+    #p2 = TCParam("itd_only")
     # p2.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 'itd_only'
     # p3 = TCParam("ild_only")
     # p3.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 'ild_only'
@@ -151,7 +149,7 @@ if __name__ == "__main__":
 
                 logger.info(f"Saving all angles for model {ex_key}...")
                 # save model results to file
-                filename = f"{ex_key}.pic"
+                filename = f"{ex_key}_silence.pic"
                 result_file = result_dir / filename
                 result_paths.append(result_file)
 

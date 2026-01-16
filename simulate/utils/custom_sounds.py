@@ -12,19 +12,58 @@ DEFAULT_CLICKS_INTERVAL = 50
 DEFAULT_SEED = 42
 
 
-# i considered subclassing for a bit but i don't know enough
+def gate_and_append_silence(
+    sound: b2h.Sound,
+    ramp_ms: float = 10.0,
+    offset_silence_duration=0 * b2.ms,
+):
+    fs = int(sound.samplerate)
+    n_samples = sound.nsamples
+    ramp_samples = int((ramp_ms / 1000.0) * fs)
+
+    if ramp_samples > 1:
+        ramp = 0.5 * (1 - np.cos(np.pi * np.arange(ramp_samples) / ramp_samples))
+        envelope = np.ones(n_samples)
+        envelope[:ramp_samples] = ramp
+        envelope[-ramp_samples:] = ramp[::-1]
+
+        data = sound.data * envelope.reshape(-1, 1)
+        sound = b2h.Sound(data, samplerate=fs * b2.Hz)
+
+    # Append silence if requested
+    if offset_silence_duration > 0 * b2.ms:
+        silence = b2h.Sound.silence(offset_silence_duration)
+        sound = b2h.Sound.sequence([sound, silence])
+
+    return sound
+
+
+
 class Tone:
     frequency: b2.Quantity
     sound: b2h.Sound
 
     def __init__(
-        self, frequency: b2.Quantity, duration=DEFAULT_SOUND_DURATION,level=None, **kwargs
+        self,
+        frequency: b2.Quantity,
+        duration=DEFAULT_SOUND_DURATION,
+        level=None,
+        ramp_ms: float = 10.0,
+        offset_silence_duration=0 * b2.ms,
+        **kwargs,
     ):
         self.frequency = frequency
-        self.sound = b2h.Sound.tone(frequency, duration, **kwargs)
-        if level is not None:
-            self.sound.level = level
 
+        sound = b2h.Sound.tone(frequency, duration, **kwargs)
+
+        if level is not None:
+            sound.level = level
+
+        self.sound = gate_and_append_silence(
+            sound,
+            ramp_ms=ramp_ms,
+            offset_silence_duration=offset_silence_duration,
+        )
 
 class ToneBurst:
     frequency: b2.Quantity
@@ -38,40 +77,80 @@ class ToneBurst:
         burst_num=DEFAULT_BURST_REP,
         silence_duration=DEFAULT_SILENCE_DURATION,
         level=None,
+        ramp_ms: float = 10.0,
+        offset_silence_duration=0 * b2.ms,
         **kwargs,
     ):
         self.frequency = frequency
         self.burst_num = burst_num
-        self.sound = b2h.Sound.sequence(
-            [
-                b2h.Sound.tone(frequency, single_duration, **kwargs),
-                b2h.Sound.silence(silence_duration),
-            ]
-        ).repeat(burst_num)
-        if level is not None:
-            self.sound.level = level
 
+        tone = b2h.Sound.tone(frequency, single_duration, **kwargs)
+
+        if level is not None:
+            tone.level = level
+
+        tone = gate_and_append_silence(tone, ramp_ms=ramp_ms)
+
+        silence = b2h.Sound.silence(silence_duration)
+
+        pattern = b2h.Sound.sequence([tone, silence])
+        sound = pattern.repeat(burst_num)
+
+        if offset_silence_duration > 0 * b2.ms:
+            sound = b2h.Sound.sequence(
+                [sound, b2h.Sound.silence(offset_silence_duration)]
+            )
+
+        self.sound = sound
 
 class WhiteNoise:
     sound: b2h.Sound
 
-    def __init__(self, duration=DEFAULT_SOUND_DURATION, level=None, seed=DEFAULT_SEED, **kwargs):
+    def __init__(
+        self,
+        duration=DEFAULT_SOUND_DURATION,
+        level=None,
+        seed=DEFAULT_SEED,
+        ramp_ms: float = 10.0,
+        offset_silence_duration=0 * b2.ms,
+        **kwargs,
+    ):
         np.random.seed(seed)
-        self.sound = b2h.Sound.whitenoise(duration, **kwargs)
+        sound = b2h.Sound.whitenoise(duration, **kwargs)
+
         if level is not None:
-            self.sound.level = level
+            sound.level = level
+
+        self.sound = gate_and_append_silence(
+            sound,
+            ramp_ms=ramp_ms,
+            offset_silence_duration=offset_silence_duration,
+        )
 
 class HarmonicComplex:
     frequency: b2.Quantity
     sound: b2h.Sound
 
     def __init__(
-        self, frequency: b2.Quantity, duration=DEFAULT_SOUND_DURATION, level=None, **kwargs
+        self,
+        frequency: b2.Quantity,
+        duration=DEFAULT_SOUND_DURATION,
+        level=None,
+        ramp_ms: float = 10.0,
+        offset_silence_duration=0 * b2.ms,
+        **kwargs,
     ):
         self.frequency = frequency
-        self.sound = b2h.Sound.harmoniccomplex(frequency, duration, **kwargs)
+        sound = b2h.Sound.harmoniccomplex(frequency, duration, **kwargs)
+
         if level is not None:
-            self.sound.level = level
+            sound.level = level
+
+        self.sound = gate_and_append_silence(
+            sound,
+            ramp_ms=ramp_ms,
+            offset_silence_duration=offset_silence_duration,
+        )
 
 class Click:
     sound: b2h.Sound
@@ -88,7 +167,6 @@ class Click:
             i = b2h.silence(duration - click_duration_ms)
         p = c + i
         self.sound = p
-
 
 class Click_Train:
     sound: b2h.Sound
@@ -114,8 +192,6 @@ class Click_Train:
     
         self.sound = train
         self.number = n
-
-
 
 class ToneFromAngle(Tone):
     # x = ToneFromAngle(20, 20 * b2.Hz)

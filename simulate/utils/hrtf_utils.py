@@ -17,46 +17,6 @@ import pysofaconventions as sofa
 from scipy.fft import rfft, irfft
 import matplotlib.pyplot as plt
 
-
-def apply_gating(sound: Sound, ramp_ms: float = 10.0) -> Sound:
-    """
-    Apply raised-cosine (Hann) onset/offset gating to a Brian2Hears Sound.
-
-    Parameters
-    ----------
-    sound : Sound
-        Brian2Hears Sound object, mono or binaural.
-    ramp_ms : float
-        Duration of onset/offset ramps in milliseconds.
-
-    Returns
-    -------
-    Sound
-        Gated sound (same samplerate and duration).
-    """
-    fs = int(sound.samplerate)
-    n_samples = sound.nsamples
-    ramp_samples = int((ramp_ms / 1000.0) * fs)
-
-    if ramp_samples <= 1:
-        return sound   # no gating needed
-
-    # --- Create raised-cosine (Hann) ramps ---
-    ramp = 0.5 * (1 - np.cos(np.pi * np.arange(ramp_samples) / ramp_samples))
-
-    # full envelope = [ramp_up | steady | ramp_down]
-    envelope = np.ones(n_samples)
-    envelope[:ramp_samples] = ramp
-    envelope[-ramp_samples:] = ramp[::-1]
-
-    # Apply to sound (supports mono or 2 channels)
-    gated_data = sound.data * envelope.reshape(-1, 1)
-
-    # Create new Sound object with same samplerate
-    gated_sound = Sound(gated_data, samplerate=fs * b2.Hz)
-
-    return gated_sound
-
 def sel_range(s, start=0 * ms, end=10 * ms):
     return s[start:end]
 
@@ -294,12 +254,6 @@ def run_hrtf(
 
     if type(sound) is not Sound:
         sound = sound.sound
-
-    # --- Apply gating ---
-    if hrtf_params.get("apply_gating"):
-        logger.debug("[run_hrtf] Applying gating before HRTF...")
-        sound = apply_gating(sound, ramp_ms=hrtf_params.get("ramp_ms"))
-
 
     # -------- Apply SOFA HRTF --------
     binaural_sound = apply_sofa_hrtf_to_sound(
