@@ -57,52 +57,35 @@ def create_save_result_object(
 
 if __name__ == "__main__":
 
-    TIME_SIMULATION = 250
-    LEVEL = 90
+    TIME_SIMULATION = 100
+    LEVEL = 60
 
     inputs = [
-        Tone(0.5 * b2.kHz, duration=200 * b2.ms, level=LEVEL * b2h.dB, ramp_ms=10, offset_silence_duration=200 * b2.ms)
-        # Tone(0.5 * b2.kHz, TIME_SIMULATION * b2.ms, LEVEL * b2h.dB),
-        # Tone(1.2 * b2.kHz, TIME_SIMULATION * b2.ms, LEVEL * b2h.dB),
-    #     Tone(4 * b2.kHz, TIME_SIMULATION * b2.ms, LEVEL * b2h.dB),
-    #     Tone(16 * b2.kHz, TIME_SIMULATION * b2.ms, LEVEL * b2h.dB),
-    #     WhiteNoise(TIME_SIMULATION * b2.ms, level=LEVEL * b2h.dB),
-    #     Click(duration=TIME_SIMULATION * b2.ms, click_duration=1, level=LEVEL * b2h.dB),
-    #     Click_Train(duration= TIME_SIMULATION * b2.ms, click_duration=1*b2.ms, interval=4*b2.ms, level=LEVEL * b2h.dB),
+        Tone(0.5 * b2.kHz, duration=TIME_SIMULATION * b2.ms, level=LEVEL * b2h.dB, ramp_ms=10, offset_silence_duration=0 * b2.ms),
+        # Tone(1.2 * b2.kHz, duration=TIME_SIMULATION * b2.ms, level=LEVEL * b2h.dB, ramp_ms=10, offset_silence_duration=0 * b2.ms),
+        # Tone(4 * b2.kHz, duration=TIME_SIMULATION * b2.ms, level=LEVEL * b2h.dB, ramp_ms=10, offset_silence_duration=0 * b2.ms),
+        # Tone(16 * b2.kHz, duration=TIME_SIMULATION * b2.ms, level=LEVEL * b2h.dB, ramp_ms=10, offset_silence_duration=0 * b2.ms),
+        # WhiteNoise(duration=TIME_SIMULATION * b2.ms, level=LEVEL * b2h.dB, ramp_ms=10, offset_silence_duration=0 * b2.ms),
+        #Click(duration=TIME_SIMULATION * b2.ms, click_duration=1, level=LEVEL * b2h.dB)
     ]
 
     models = [BrainstemModel]
     cochlea_key = ZI_COC_KEY
 
     ps = []
-    for s in range(1):
+
+    for s in range(5):
+        print(s)
         p = params(f"subject_{s}")
         p.cochlea[cochlea_key]['hrtf_params']['subj_number'] = s
         ps.append(p)
 
-
-    #p2 = TCParam("itd_only")
-    # p2.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 'itd_only'
-    # p3 = TCParam("ild_only")
-    # p3.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 'ild_only'
-    
-#     p4 = TCParam("itd_only_myoga_null")
-#     p4.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 'itd_only'
-#     p4.DELAYS.DELTA_CONTRA = 0
-#     p4.DELAYS.DELTA_IPSI = 0
-
-#     p5 = TCParam("itd_only_myoga_inv")
-#     p5.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 'itd_only'
-#     x = p5.DELAYS.DELTA_CONTRA
-#     p5.DELAYS.DELTA_CONTRA = p5.DELAYS.DELTA_IPSI
-#     p5.DELAYS.DELTA_IPSI = x
-    
-#     p6 = TCParam("itd_only_no_MSO_inh")
-
-#     p6.cochlea[cochlea_key]['hrtf_params']['subj_number'] = 'itd_only'
-#     p6.SYN_WEIGHTS.LNTBCs2MSO = 0
-#     p6.SYN_WEIGHTS.NTBCs2MSO = 0
-
+    # delays = [[-0.4, 0.2], [0,-0.6], [0.6, 0]]
+    # for d in delays:
+    #     p = params(f"subject_0_MSO_ipsi_{d[0]}_contra_{d[1]}")
+    #     p.DELAYS.DELTA_IPSI = d[0]
+    #     p.DELAYS.DELTA_CONTRA = d[1]
+    #     ps.append(p)
 
     num_runs = len(inputs) * len(ps)
     current_run = 0
@@ -116,7 +99,6 @@ if __name__ == "__main__":
             for param in ps:
                 curr_ex = f"{Model.key}&{cochlea_key}&{param.key}"
                 result_paths = []
-    
                 L_sounds = {}
                 R_sounds = {}
                 gated_sound_global = None
@@ -149,7 +131,7 @@ if __name__ == "__main__":
 
                 logger.info(f"Saving all angles for model {ex_key}...")
                 # save model results to file
-                filename = f"{ex_key}_silence.pic"
+                filename = f"{ex_key}_ipsi_-0.4_contra_0.2_delays.pic"
                 result_file = result_dir / filename
                 result_paths.append(result_file)
 

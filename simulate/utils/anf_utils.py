@@ -32,25 +32,21 @@ def create_sound_key(sound):
     add_info = None
     if type(sound) is Tone:
         add_info = str(sound.frequency).replace(" ", "")
-        level = int(sound.sound.level)
+        level = round(sound.sound.level)
         sound_type = "tone"
     elif type(sound) is ToneBurst:
         add_info = str(sound.frequency).replace(" ", "")
-        level = int(sound.sound.level)
+        level = round(sound.sound.level)
         sound_type = "toneburst"
-    elif type(sound) is ToneWithSilence:
-        add_info = str(sound.frequency).replace(" ", "")
-        level = int(sound.sound.level)
-        sound_type = "tone_with_silence"
     elif type(sound) is WhiteNoise:
         sound_type = "whitenoise"
-        level = int(sound.sound.level)
+        level = round(sound.sound.level)
     elif type(sound) is Click:
         sound_type = "click"
-        level = int(sound.peak)
+        level = round(sound.peak)
     elif type(sound) is Click_Train:
         sound_type = "click_train"
-        level = int(sound.peak)
+        level = round(sound.peak)
     elif type(sound) is HarmonicComplex:
         sound_type = "harmonic"
     else:
@@ -64,6 +60,7 @@ def create_sound_key(sound):
 def load_anf_response(sound, angle, cochlea_key, params, ignore_cache=False):
 
     cochlea_func: MemorizedFunc = COCHLEAS[cochlea_key]
+    logger.info(f"Subject chosen: {params[cochlea_key]['hrtf_params']['subj_number']}")
     params = params[cochlea_key]
 
     if not cochlea_func.check_call_in_cache(sound, angle, params):

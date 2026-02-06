@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from utils.cochlea_utils import ITD_REMOVAL_STRAT
+from utils.cochlea_utils import ITD_REMOVAL_STRAT, NUM_CF, NUM_ANF_PER_HC
 
 @dataclass
 class Parameters:
@@ -54,11 +54,13 @@ class Parameters:
     # ------------------------------------------------------------
     # --- GLOBAL membrane & voltage parameters -------------------
     # ------------------------------------------------------------
-    n_ANFs: int = 35000
-    V_m: float = -65.0       # 🟢 UPDATED (was -70.0)
-    # Physiologically realistic resting potential for CN/MSO neurons ~−60…−65 mV
-    V_reset: float = -67.0   # 🟢 UPDATED (was same as V_m)
-    # Slightly below rest to mimic brief after-hyperpolarization
+    n_ANFs: int = NUM_CF * NUM_ANF_PER_HC  # Total ANFs in model
+    E_L: float = -65.0      # Physiologically realistic resting potential for CN/MSO neurons ~−60…−65 mV
+    V_reset: float = -67.0   # Slightly below rest to mimic brief after-hyperpolarization
+
+    # Reversal potentials
+    EXC_REV = 0.0
+    INH_REV = -75.0
 
     # ------------------------------------------------------------
     # --- Population counts --------------------------------------
@@ -72,9 +74,11 @@ class Parameters:
     SBCs2LSOs: int = int(POP_CONN.ANFs2GBCs / POP_CONN.ANFs2SBCs)
     n_SBCs: int = int(n_ANFs / POP_CONN.ANFs2SBCs)
     n_GBCs: int = int(n_ANFs / POP_CONN.ANFs2GBCs)
+    n_MNTBCs: int = n_GBCs
+    n_LNTBCs: int = n_GBCs
+    n_LSOs: int = n_GBCs
     n_MSOs: int = n_GBCs
     n_LSOs: int = n_GBCs
-    n_inhMSOs: int = n_GBCs
 
     # ------------------------------------------------------------
     # --- Delays (ms) --------------------------------------------
@@ -105,78 +109,108 @@ class Parameters:
         @property
         def MNTBCs2MSO_inh_contra(self): return 1.44 + self.DELTA_CONTRA
 
-    # ------------------------------------------------------------
-    # --- Synaptic time constants (ms) ----------------------------
-    # ------------------------------------------------------------
-    @dataclass
-    class MSO_TAUS:
-        rise_ex: float = 0.12   # 🟢 UPDATED (was 0.2)  — fast AMPA
-        rise_in: float = 0.3    # 🟢 UPDATED (was 0.2)  — glycinergic
-        decay_ex: float = 0.35  # 🟢 UPDATED (was 0.5)
-        decay_in: float = 4.0   # 🟢 UPDATED (was 1.5) -> can be shortened more
 
-    # ------------------------------------------------------------
     # --- Synaptic weights (nS or relative units) -----------------
     # ------------------------------------------------------------
     @dataclass
     class SYN_WEIGHTS:
-        ANFs2SBCs: float = 35.0      # same
-        ANFs2GBCs: float = 7.0       # same
-        GBCs2LNTBCs: float = 20.0
+        ANFs2SBCs: float = 15.0      
+        ANFs2GBCs: float = 7.0      
+        GBCs2LNTBCs: float = 30.0
         GBCs2MNTBCs: float = 30.0
-        SBCs2LSO: float = 8.0        # same
+        SBCs2LSO: float = 8.0        
         MNTBCs2LSO: float = -20.0 
-        MNTBCs2MSO: float = -12.0 # 🟢 UPDATED (was -40) 
-        LNTBCs2MSO: float = -12.0 # 🟢 UPDATED (was -40) 
-        SBCs2MSO: float = 12.0  # 🟢 UPDATED (was +9) 
+        MNTBCs2MSO: float = -20.0 
+        LNTBCs2MSO: float = -12.0 
+        SBCs2MSO: float = 5.0  
 
     # ------------------------------------------------------------
     # --- Membrane capacitances (pF) ------------------------------
     # ------------------------------------------------------------
     @dataclass
     class MEMB_CAPS:
-        SBC: float = 30.0    # 🟢 UPDATED (was 15) — typical SBC soma 20–40 pF
-        GBC: float = 40.0    # 🟢 UPDATED (was 15)
-        MNTBC: float = 25.0  # 🟢 UPDATED (was 15)
-        LNTBC: float = 25.0  # 🟢 UPDATED (was 15)
-        MSO: float = 20.0    # ✅ kept (literature 15–25 pF)
-        LSO: float = 35.0    # 🟢 UPDATED (was 30)
+        SBC: float = 26.0 
+        GBC: float = 26.0   
+        MNTBC: float = 20.0
+        LNTBC: float = 20.0
+        MSO: float = 20.0
+        LSO: float = 20.0
 
     # ------------------------------------------------------------
     # --- Leak conductances (nS) ---------------------------------
     # ------------------------------------------------------------
     @dataclass
     class G_LEAK:
-        SBC: float = 20.0   # 🟢 UPDATED (was 40) τm≈1.5 ms with C=30 pF
-        GBC: float = 20.0   # 🟢 UPDATED (was 25) τm≈2 ms
-        LNTBC: float = 20.0 # 🟢 UPDATED (was 25)
-        MNTBC: float = 12.0 # 🟢 UPDATED (was 25) τm≈2 ms, fast relay
-        MSO: float = 57.0   # 🟢 UPDATED (was 80) τm≈0.35 ms, fits physiology
-        LSO: float = 8.75   # 🟢 UPDATED (was 20) τm≈4 ms (C=35 pF)
+        SBC: float = 34.6   
+        GBC: float = 104.0   
+        LNTBC: float = 28.0   
+        MNTBC: float = 28.0   
+        MSO: float = 28.0   
+        LSO: float = 28.0   
 
     # ------------------------------------------------------------
-    # --- NEW: POPULATION-SPECIFIC THRESHOLDS ---------------------
+    # --- POPULATION-SPECIFIC THRESHOLDS ---------------------
     # ------------------------------------------------------------
     @dataclass
     class V_TH:
-        SBC: float = -42.0     # 🟢 NEW — bushy cells fire ~-40/-45
-        GBC: float = -40.0     # 🟢 NEW — globular are slightly lower
-        LNTBC: float = -45.0   # 🟢 NEW — inhibitory interneurons
-        MNTBC: float = -45.0   # 🟢 NEW — fast relay
-        MSO: float = -38.0     # 🟢 NEW — MSO threshold ~ -35/-40
-        LSO: float = -45.0     # 🟢 NEW — LSO principal cells
+        SBC: float = -45.0     
+        GBC: float = -45.0     
+        LNTBC: float = -45.0     
+        MNTBC: float = -45.0     
+        MSO: float = -45.0     
+        LSO: float = -45.0     
 
     # ------------------------------------------------------------
-    # --- NEW: POPULATION-SPECIFIC REFRACTORY PERIODS (ms) -------
+    # --- POPULATION-SPECIFIC REFRACTORY PERIODS (ms) -------
     # ------------------------------------------------------------
     @dataclass
     class T_REF:
-        SBC: float = 0.5       # 🟢 NEW — bushy cells recover fast
-        GBC: float = 0.5       # 🟢 NEW
-        LNTBC: float = 0.5     # 🟢 NEW
-        MNTBC: float = 0.5     # 🟢 NEW — calyx relay is fast
-        MSO: float = 0.2       # 🟢 NEW — sub-ms integration window
-        LSO: float = 1.0       # 🟢 NEW — LSO slower membrane
+        SBC: float = 0.6       
+        GBC: float = 0.6       
+        LNTBC: float = 0.5     
+        MNTBC: float = 0.5     
+        MSO: float = 0.5       
+        LSO: float = 0.5     
+
+    # ------------------------------------------------------------
+    # --- Synaptic time constants (ms) ----------------------------
+    # ------------------------------------------------------------
+    @dataclass
+    class TAUS_EX_RISE:
+        SBC: float = 0.2       
+        GBC: float = 0.2       
+        LNTBC: float = 0.2     
+        MNTBC: float = 0.2     
+        MSO: float = 0.2       
+        LSO: float = 0.2  
+    # ------------------------------------------------------------ 
+    @dataclass
+    class TAUS_EX_DECAY:
+        SBC: float = 0.5       
+        GBC: float = 0.5       
+        LNTBC: float = 0.2     
+        MNTBC: float = 0.2     
+        MSO: float = 0.2       
+        LSO: float = 0.2  
+    # ------------------------------------------------------------
+    #     @dataclass
+    class TAUS_IN_RISE:
+        SBC: float = 0.2       
+        GBC: float = 0.2       
+        LNTBC: float = 0.2     
+        MNTBC: float = 0.2     
+        MSO: float = 0.2       
+        LSO: float = 0.2  
+    # ------------------------------------------------------------  
+    #     @dataclass
+    class TAUS_IN_DECAY:
+        SBC: float = 0.2       
+        GBC: float = 0.2       
+        LNTBC: float = 0.2     
+        MNTBC: float = 0.2     
+        MSO: float = 0.2       
+        LSO: float = 0.2  
+    # ------------------------------------------------------------   
 
 
     # ------------------------------------------------------------
@@ -187,7 +221,7 @@ class Parameters:
         STORE_POPS: set = field(default_factory=lambda: set([]))
         NEST_KERNEL_PARAMS: dict = field(
             default_factory=lambda: {
-                "resolution": 0.1,
+                "resolution": 0.01,
                 "rng_seed": 42,
                 "total_num_virtual_procs": 32,
             }
@@ -201,7 +235,10 @@ class Parameters:
         self.DELAYS = self.DELAYS()
         self.SYN_WEIGHTS = self.SYN_WEIGHTS()
         self.POP_CONN = self.POP_CONN()
-        self.MSO_TAUS = self.MSO_TAUS()
+        self.TAUS_EX_RISE = self.TAUS_EX_RISE()
+        self.TAUS_EX_DECAY = self.TAUS_EX_DECAY()
+        self.TAUS_IN_RISE = self.TAUS_IN_RISE()
+        self.TAUS_IN_DECAY = self.TAUS_IN_DECAY()
         self.MEMB_CAPS = self.MEMB_CAPS()
         self.G_LEAK = self.G_LEAK()
 

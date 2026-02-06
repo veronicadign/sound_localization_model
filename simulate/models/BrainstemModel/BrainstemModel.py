@@ -35,9 +35,6 @@ class BrainstemModel(SpikingModel):
         self.pops = {"L": {}, "R": {}}
         self.recs = {"L": {}, "R": {}}
 
-        # Reversal potentials shared across SOC
-        EXC_REV = 0.0
-        INH_REV = -75.0
 
         for side in ["L", "R"]:
 
@@ -58,13 +55,14 @@ class BrainstemModel(SpikingModel):
                 params={
                     "C_m": P.MEMB_CAPS.SBC,
                     "g_L": P.G_LEAK.SBC,
-                    "E_L": P.V_m,                 # 🟢 NEW
-                    "V_m": P.V_m,                 # 🟢 NEW
+                    "E_L": P.E_L,                                
                     "V_reset": P.V_reset,
-                    "V_th": P.V_TH.SBC,           # 🟢 NEW
-                    "t_ref": P.T_REF.SBC,         # 🟢 NEW
-                    "E_ex": EXC_REV,              # 🟢 NEW
-                    "E_in": INH_REV,              # 🟢 NEW
+                    "V_th": P.V_TH.SBC,           
+                    "t_ref": P.T_REF.SBC,         
+                    "E_ex": P.EXC_REV,              
+                    "E_in": P.INH_REV,
+                    "tau_rise_ex": P.TAUS_EX_RISE.SBC,
+                    "tau_decay_ex": P.TAUS_EX_DECAY.SBC,      
                 },
             )
 
@@ -77,13 +75,14 @@ class BrainstemModel(SpikingModel):
                 params={
                     "C_m": P.MEMB_CAPS.GBC,
                     "g_L": P.G_LEAK.GBC,
-                    "E_L": P.V_m,                 # 🟢 NEW
-                    "V_m": P.V_m,                 # 🟢 NEW
+                    "E_L": P.E_L,                                
                     "V_reset": P.V_reset,
-                    "V_th": P.V_TH.GBC,           # 🟢 NEW
-                    "t_ref": P.T_REF.GBC,         # 🟢 NEW
-                    "E_ex": EXC_REV,              # 🟢 NEW
-                    "E_in": INH_REV,              # 🟢 NEW
+                    "V_th": P.V_TH.GBC,           
+                    "t_ref": P.T_REF.GBC,         
+                    "E_ex": P.EXC_REV,              
+                    "E_in": P.INH_REV,
+                    "tau_rise_ex": P.TAUS_EX_RISE.GBC,
+                    "tau_decay_ex": P.TAUS_EX_DECAY.GBC,    
                 },
             )
 
@@ -92,17 +91,18 @@ class BrainstemModel(SpikingModel):
             # ------------------------------------------------------
             self.pops[side]["LNTBC"] = nest.Create(
                 "iaf_cond_beta",
-                P.n_GBCs,
+                P.n_LNTBCs,
                 params={
                     "C_m": P.MEMB_CAPS.LNTBC,
                     "g_L": P.G_LEAK.LNTBC,
-                    "E_L": P.V_m,                  # 🟢 NEW
-                    "V_m": P.V_m,                  # 🟢 NEW
+                    "E_L": P.E_L,                                
                     "V_reset": P.V_reset,
-                    "V_th": P.V_TH.LNTBC,          # 🟢 NEW
-                    "t_ref": P.T_REF.LNTBC,        # 🟢 NEW
-                    "E_ex": EXC_REV,               # 🟢 NEW
-                    "E_in": INH_REV,               # 🟢 NEW
+                    "V_th": P.V_TH.LNTBC,           
+                    "t_ref": P.T_REF.LNTBC,         
+                    "E_ex": P.EXC_REV,              
+                    "E_in": P.INH_REV,
+                    "tau_rise_ex": P.TAUS_EX_RISE.LNTBC,
+                    "tau_decay_ex": P.TAUS_EX_DECAY.LNTBC,    
                 },
             )
 
@@ -111,17 +111,18 @@ class BrainstemModel(SpikingModel):
             # ------------------------------------------------------
             self.pops[side]["MNTBC"] = nest.Create(
                 "iaf_cond_beta",
-                P.n_GBCs,
+                P.n_MNTBCs,
                 params={
                     "C_m": P.MEMB_CAPS.MNTBC,
                     "g_L": P.G_LEAK.MNTBC,
-                    "E_L": P.V_m,                  # 🟢 NEW
-                    "V_m": P.V_m,                  # 🟢 NEW
+                    "E_L": P.E_L,                                
                     "V_reset": P.V_reset,
-                    "V_th": P.V_TH.MNTBC,          # 🟢 NEW
-                    "t_ref": P.T_REF.MNTBC,        # 🟢 NEW
-                    "E_ex": EXC_REV,               # 🟢 NEW
-                    "E_in": INH_REV,               # 🟢 NEW
+                    "V_th": P.V_TH.MNTBC,           
+                    "t_ref": P.T_REF.MNTBC,         
+                    "E_ex": P.EXC_REV,              
+                    "E_in": P.INH_REV,
+                    "tau_rise_ex": P.TAUS_EX_RISE.MNTBC,
+                    "tau_decay_ex": P.TAUS_EX_DECAY.MNTBC,  
                 },
             )
 
@@ -134,19 +135,16 @@ class BrainstemModel(SpikingModel):
                 params={
                     "C_m": P.MEMB_CAPS.MSO,
                     "g_L": P.G_LEAK.MSO,
-                    "E_L": P.V_m,                  # 🟢 NEW
-                    "V_m": P.V_m,                  # 🟢 NEW
+                    "E_L": P.E_L,                                
                     "V_reset": P.V_reset,
-                    "V_th": P.V_TH.MSO,            # 🟢 NEW
-                    "t_ref": P.T_REF.MSO,          # 🟢 NEW
-                    "E_ex": EXC_REV,               # 🟢 NEW
-                    "E_in": INH_REV,               # 🟢 NEW
-
-                    # MSO synaptic time constants
-                    #"tau_rise_ex": P.MSO_TAUS.rise_ex,
-                    #"tau_rise_in": P.MSO_TAUS.rise_in,
-                    #"tau_decay_ex": P.MSO_TAUS.decay_ex,
-                    #"tau_decay_in": P.MSO_TAUS.decay_in,
+                    "V_th": P.V_TH.MSO,           
+                    "t_ref": P.T_REF.MSO,         
+                    "E_ex": P.EXC_REV,              
+                    "E_in": P.INH_REV,
+                    "tau_rise_ex": P.TAUS_EX_RISE.MSO,
+                    "tau_decay_ex": P.TAUS_EX_DECAY.MSO,
+                    "tau_rise_in": P.TAUS_IN_RISE.MSO,
+                    "tau_decay_in": P.TAUS_IN_DECAY.MSO,    
                 },
             )
 
@@ -159,13 +157,16 @@ class BrainstemModel(SpikingModel):
                 params={
                     "C_m": P.MEMB_CAPS.LSO,
                     "g_L": P.G_LEAK.LSO,
-                    "E_L": P.V_m,                  # 🟢 NEW
-                    "V_m": P.V_m,                  # 🟢 NEW
+                    "E_L": P.E_L,                                
                     "V_reset": P.V_reset,
-                    "V_th": P.V_TH.LSO,            # 🟢 NEW
-                    "t_ref": P.T_REF.LSO,          # 🟢 NEW
-                    "E_ex": EXC_REV,               # 🟢 NEW
-                    "E_in": INH_REV,               # 🟢 NEW
+                    "V_th": P.V_TH.LSO,           
+                    "t_ref": P.T_REF.LSO,         
+                    "E_ex": P.EXC_REV,              
+                    "E_in": P.INH_REV,
+                    "tau_rise_ex": P.TAUS_EX_RISE.LSO,
+                    "tau_decay_ex": P.TAUS_EX_DECAY.LSO,
+                    "tau_rise_in": P.TAUS_IN_RISE.LSO,
+                    "tau_decay_in": P.TAUS_IN_DECAY.LSO,    
                 },
             )
                 
