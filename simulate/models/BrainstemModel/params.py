@@ -51,78 +51,74 @@ class Parameters:
         )
     )
 
-    # ------------------------------------------------------------
-    # --- GLOBAL membrane & voltage parameters -------------------
-    # ------------------------------------------------------------
+
+    # 1. --- Network Parameters  -----------------
+
     n_ANFs: int = NUM_CF * NUM_ANF_PER_HC  # Total ANFs in model
-    E_L: float = -65.0      # Physiologically realistic resting potential for CN/MSO neurons ~−60…−65 mV
-    V_reset: float = -67.0   # Slightly below rest to mimic brief after-hyperpolarization
-
-    # Reversal potentials
-    EXC_REV = 0.0
-    INH_REV = -75.0
-
-    # ------------------------------------------------------------
-    # --- Population counts --------------------------------------
-    # ------------------------------------------------------------
     @dataclass
-    class POP_CONN:
-        ANFs2SBCs: int = 4
+    class POP_NUM:
+        n_SBCs: int = 28000
+        n_GBCs: int = 3600
+        n_MNTBCs: int = 3600
+        n_LNTBCs: int = 3600
+        n_LSOs: int = 5600
+        n_MSOs: int = 15500
+        n_SPNs: int = 3600
+    
+    @dataclass
+    class POP_CONV:
+        ANFs2SBCs: int = 3
         ANFs2GBCs: int = 20
+        GBCs2MNTBCs: int = 1
+        GBCs2LNTBCs: int = 1 #new
+        SBCs2LSOs: int = 40
+        MNTBCs2LSOs: int = 8
+        SBCs2MSOs: int = 3
+        MNTBCs2MSOs: int = 2    
+        LNTBCs2MSOs: int = 1
+        MNTBCs2SPNs: int = 4  
 
-    SBCs2MSOs: int = int(POP_CONN.ANFs2GBCs / POP_CONN.ANFs2SBCs)
-    SBCs2LSOs: int = int(POP_CONN.ANFs2GBCs / POP_CONN.ANFs2SBCs)
-    n_SBCs: int = int(n_ANFs / POP_CONN.ANFs2SBCs)
-    n_GBCs: int = int(n_ANFs / POP_CONN.ANFs2GBCs)
-    n_MNTBCs: int = n_GBCs
-    n_LNTBCs: int = n_GBCs
-    n_LSOs: int = n_GBCs
-    n_MSOs: int = n_GBCs
-    n_LSOs: int = n_GBCs
 
+    # 2. --- Synaptic Parameters  -----------------
     # ------------------------------------------------------------
-    # --- Delays (ms) --------------------------------------------
-    # ------------------------------------------------------------
-    @dataclass
-    class DELAYS:
-        GBCs2MNTBCs: float = 0.45
-        GBCs2LNTBCs: float = 0.45
-        SBCs2MSO_exc_ipsi: float = 2.0
-        SBCs2MSO_exc_contra: float = 2.0
 
-        def __init__(self):
-            self._DELTA_IPSI: float = 0.2
-            self._DELTA_CONTRA: float = -0.4
-
-        @property
-        def DELTA_IPSI(self): return self._DELTA_IPSI
-        @DELTA_IPSI.setter
-        def DELTA_IPSI(self, value): self._DELTA_IPSI = value
-
-        @property
-        def DELTA_CONTRA(self): return self._DELTA_CONTRA
-        @DELTA_CONTRA.setter
-        def DELTA_CONTRA(self, value): self._DELTA_CONTRA = value
-
-        @property
-        def LNTBCs2MSO_inh_ipsi(self): return 1.44 + self.DELTA_IPSI
-        @property
-        def MNTBCs2MSO_inh_contra(self): return 1.44 + self.DELTA_CONTRA
-
-
-    # --- Synaptic weights (nS or relative units) -----------------
-    # ------------------------------------------------------------
     @dataclass
     class SYN_WEIGHTS:
-        ANFs2SBCs: float = 15.0      
-        ANFs2GBCs: float = 7.0      
-        GBCs2LNTBCs: float = 30.0
+        ANFs2SBCs: float = 16.0      
+        ANFs2GBCs: float = 7.0
+        #      
+        GBCs2LNTBCs: float = 5.0
         GBCs2MNTBCs: float = 30.0
-        SBCs2LSO: float = 8.0        
-        MNTBCs2LSO: float = -20.0 
-        MNTBCs2MSO: float = -20.0 
-        LNTBCs2MSO: float = -12.0 
-        SBCs2MSO: float = 5.0  
+        #
+        SBCs2LSO: float = 1.0 #5       
+        MNTBCs2LSO: float = -10.0 
+        #
+        SBCs2MSO: float = 20.0
+        MNTBCs2MSO: float = -10.0 #-20.0
+        LNTBCs2MSO: float = -10.0 #-20.0
+        #
+        MNTBCs2SPN: float = -40.0 
+
+    @dataclass
+    class SYN_DELAYS:
+        ANFs2SBCs: float = 0.5
+        ANFs2GBCs: float = 0.5
+        #
+        GBCs2MNTBCs: float = 0.5
+        GBCs2LNTBCs: float = 0.5
+        #
+        SBCs2LSO: float = 2.0
+        MNTBCs2LSO: float = 1.0 #
+        #
+        SBCs2MSOipsi: float = 2.0
+        SBCs2MSOcontra: float = 2.0
+        LNTBCs2MSOipsi: float = 1.0 
+        MNTBCs2MSOcontra: float = 1.0
+        #
+        MNTBCs2SPN: float = 1.0 #0.11 integration time at MNTB/LNTB
+
+    # 3. --- Neuronal Parameters  -----------------
+    # ------------------------------------------------------------
 
     # ------------------------------------------------------------
     # --- Membrane capacitances (pF) ------------------------------
@@ -130,23 +126,51 @@ class Parameters:
     @dataclass
     class MEMB_CAPS:
         SBC: float = 26.0 
-        GBC: float = 26.0   
-        MNTBC: float = 20.0
-        LNTBC: float = 20.0
-        MSO: float = 20.0
-        LSO: float = 20.0
+        GBC: float = 13.0
+        LNTBC: float = 12.0   
+        MNTBC: float = 12.0
+        LSO: float = 12.0
+        MSO: float = 70.0
+        SPN: float = 75.0
 
     # ------------------------------------------------------------
     # --- Leak conductances (nS) ---------------------------------
     # ------------------------------------------------------------
     @dataclass
     class G_LEAK:
-        SBC: float = 34.6   
-        GBC: float = 104.0   
-        LNTBC: float = 28.0   
-        MNTBC: float = 28.0   
-        MSO: float = 28.0   
-        LSO: float = 28.0   
+        SBC: float = 43.3   # tau = 0.6 ms
+        GBC: float = 86.6   # tau = 0.15 ms
+        LNTBC: float = 1.33 # tau = 9 ms  
+        MNTBC: float = 1.33 # tau = 9 ms 
+        LSO: float = 24 # tau = 0.5 ms
+        MSO: float = 70 # tau = 1 ms   
+        SPN: float = 75 # tau = 1 ms  
+
+    # ------------------------------------------------------------
+    # --- Leak reversal potentials (mV) ------------------------------
+    # ------------------------------------------------------------
+    @dataclass
+    class E_L:
+        SBC: float = -65.0 
+        GBC: float = -65.0
+        LNTBC: float = -60.0   
+        MNTBC: float = -67.0
+        LSO: float = -63.0
+        MSO: float = -57.0
+        SPN: float = -65.0
+    
+    # ------------------------------------------------------------
+    # --- Reset potentials (mV) ------------------------------
+    # ------------------------------------------------------------
+    @dataclass 
+    class V_RESET:
+        SBC: float = -67.0   
+        GBC: float = -67.0   
+        LNTBC: float = -62.0
+        MNTBC: float = -69.0
+        LSO: float = -65.0
+        MSO: float = -57.0
+        SPN: float = -67.0
 
     # ------------------------------------------------------------
     # --- POPULATION-SPECIFIC THRESHOLDS ---------------------
@@ -158,7 +182,8 @@ class Parameters:
         LNTBC: float = -45.0     
         MNTBC: float = -45.0     
         MSO: float = -45.0     
-        LSO: float = -45.0     
+        LSO: float = -45.0 
+        SPN: float = -45.0    
 
     # ------------------------------------------------------------
     # --- POPULATION-SPECIFIC REFRACTORY PERIODS (ms) -------
@@ -167,10 +192,24 @@ class Parameters:
     class T_REF:
         SBC: float = 0.6       
         GBC: float = 0.6       
-        LNTBC: float = 0.5     
-        MNTBC: float = 0.5     
-        MSO: float = 0.5       
-        LSO: float = 0.5     
+        LNTBC: float = 0.6     
+        MNTBC: float = 0.6     
+        MSO: float = 0.6        
+        LSO: float = 0.6 
+        SPN: float = 0.6   
+
+    # ------------------------------------------------------------
+    # ---  Excitatory reversal potentials (mV) --------------------------
+    # ------------------------------------------------------------
+    @dataclass
+    class EXC_REV:
+        SBC: float = 0 
+        GBC: float = 0
+        LNTBC: float = 0   
+        MNTBC: float = 0
+        LSO: float = 0
+        MSO: float = 0
+        SPN: float = 0
 
     # ------------------------------------------------------------
     # --- Synaptic time constants (ms) ----------------------------
@@ -179,37 +218,57 @@ class Parameters:
     class TAUS_EX_RISE:
         SBC: float = 0.2       
         GBC: float = 0.2       
-        LNTBC: float = 0.2     
-        MNTBC: float = 0.2     
-        MSO: float = 0.2       
-        LSO: float = 0.2  
+        LNTBC: float = 0.25     
+        MNTBC: float = 0.1  
+        LSO: float = 0.5    
+        MSO: float = 0.15
+        SPN: float = 0.5        
     # ------------------------------------------------------------ 
     @dataclass
     class TAUS_EX_DECAY:
         SBC: float = 0.5       
         GBC: float = 0.5       
-        LNTBC: float = 0.2     
-        MNTBC: float = 0.2     
-        MSO: float = 0.2       
-        LSO: float = 0.2  
+        LNTBC: float = 3.8     
+        MNTBC: float = 0.35     
+        LSO: float = 1.0
+        MSO: float = 0.3
+        SPN: float = 1.0
+    
     # ------------------------------------------------------------
-    #     @dataclass
+    # ---  Inhibitory reversal potentials (mV) --------------------------
+    # ------------------------------------------------------------
+    @dataclass
+    class INH_REV:
+        SBC: float = -75.0 
+        GBC: float = -75.0
+        LNTBC: float = -75.0   
+        MNTBC: float = -75.0
+        LSO: float = -75.0
+        MSO: float = -75.0
+        SPN: float = -20.0
+
+    # ------------------------------------------------------------
+    # --- Synaptic time constants (ms) ----------------------------
+    # ------------------------------------------------------------
+    @dataclass
     class TAUS_IN_RISE:
-        SBC: float = 0.2       
-        GBC: float = 0.2       
-        LNTBC: float = 0.2     
-        MNTBC: float = 0.2     
-        MSO: float = 0.2       
-        LSO: float = 0.2  
+        SBC: float = 2.0   
+        GBC: float = 2.0      
+        LNTBC: float = 2.0   
+        MNTBC: float = 2.0   
+        LSO: float = 0.15   
+        MSO: float = 0.15       
+        SPN: float = 0.15  
     # ------------------------------------------------------------  
-    #     @dataclass
+    @dataclass
     class TAUS_IN_DECAY:
-        SBC: float = 0.2       
-        GBC: float = 0.2       
-        LNTBC: float = 0.2     
-        MNTBC: float = 0.2     
-        MSO: float = 0.2       
-        LSO: float = 0.2  
+        SBC: float = 2.0       
+        GBC: float = 2.0       
+        LNTBC: float = 2.0
+        MNTBC: float = 2.0      
+        LSO: float = 0.7
+        MSO: float = 0.7  
+        SPN: float = 0.7  
     # ------------------------------------------------------------   
 
 
@@ -232,9 +291,9 @@ class Parameters:
     # ------------------------------------------------------------
     def __post_init__(self):
         self.CONFIG = self.CONFIG()
-        self.DELAYS = self.DELAYS()
+        self.SYN_DELAYS = self.SYN_DELAYS()
         self.SYN_WEIGHTS = self.SYN_WEIGHTS()
-        self.POP_CONN = self.POP_CONN()
+        self.POP_CONV = self.POP_CONV()
         self.TAUS_EX_RISE = self.TAUS_EX_RISE()
         self.TAUS_EX_DECAY = self.TAUS_EX_DECAY()
         self.TAUS_IN_RISE = self.TAUS_IN_RISE()

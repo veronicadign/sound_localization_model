@@ -51,16 +51,16 @@ class BrainstemModel(SpikingModel):
             # ------------------------------------------------------
             self.pops[side]["SBC"] = nest.Create(
                 "iaf_cond_beta",
-                P.n_SBCs,
+                P.POP_NUM.n_SBCs,
                 params={
                     "C_m": P.MEMB_CAPS.SBC,
                     "g_L": P.G_LEAK.SBC,
-                    "E_L": P.E_L,                                
-                    "V_reset": P.V_reset,
+                    "E_L": P.E_L.SBC,                                
+                    "V_reset": P.V_RESET.SBC,
                     "V_th": P.V_TH.SBC,           
                     "t_ref": P.T_REF.SBC,         
-                    "E_ex": P.EXC_REV,              
-                    "E_in": P.INH_REV,
+                    "E_ex": P.EXC_REV.SBC,              
+                    "E_in": P.INH_REV.SBC,
                     "tau_rise_ex": P.TAUS_EX_RISE.SBC,
                     "tau_decay_ex": P.TAUS_EX_DECAY.SBC,      
                 },
@@ -71,16 +71,16 @@ class BrainstemModel(SpikingModel):
             # ------------------------------------------------------
             self.pops[side]["GBC"] = nest.Create(
                 "iaf_cond_beta",
-                P.n_GBCs,
+                P.POP_NUM.n_GBCs,
                 params={
                     "C_m": P.MEMB_CAPS.GBC,
                     "g_L": P.G_LEAK.GBC,
-                    "E_L": P.E_L,                                
-                    "V_reset": P.V_reset,
+                    "E_L": P.E_L.GBC,                                
+                    "V_reset": P.V_RESET.GBC,
                     "V_th": P.V_TH.GBC,           
                     "t_ref": P.T_REF.GBC,         
-                    "E_ex": P.EXC_REV,              
-                    "E_in": P.INH_REV,
+                    "E_ex": P.EXC_REV.GBC,              
+                    "E_in": P.INH_REV.GBC,
                     "tau_rise_ex": P.TAUS_EX_RISE.GBC,
                     "tau_decay_ex": P.TAUS_EX_DECAY.GBC,    
                 },
@@ -91,16 +91,16 @@ class BrainstemModel(SpikingModel):
             # ------------------------------------------------------
             self.pops[side]["LNTBC"] = nest.Create(
                 "iaf_cond_beta",
-                P.n_LNTBCs,
+                P.POP_NUM.n_LNTBCs,
                 params={
                     "C_m": P.MEMB_CAPS.LNTBC,
                     "g_L": P.G_LEAK.LNTBC,
-                    "E_L": P.E_L,                                
-                    "V_reset": P.V_reset,
+                    "E_L": P.E_L.LNTBC,                                
+                    "V_reset": P.V_RESET.LNTBC,
                     "V_th": P.V_TH.LNTBC,           
                     "t_ref": P.T_REF.LNTBC,         
-                    "E_ex": P.EXC_REV,              
-                    "E_in": P.INH_REV,
+                    "E_ex": P.EXC_REV.LNTBC,              
+                    "E_in": P.INH_REV.LNTBC,
                     "tau_rise_ex": P.TAUS_EX_RISE.LNTBC,
                     "tau_decay_ex": P.TAUS_EX_DECAY.LNTBC,    
                 },
@@ -111,16 +111,16 @@ class BrainstemModel(SpikingModel):
             # ------------------------------------------------------
             self.pops[side]["MNTBC"] = nest.Create(
                 "iaf_cond_beta",
-                P.n_MNTBCs,
+                P.POP_NUM.n_MNTBCs,
                 params={
                     "C_m": P.MEMB_CAPS.MNTBC,
                     "g_L": P.G_LEAK.MNTBC,
-                    "E_L": P.E_L,                                
-                    "V_reset": P.V_reset,
+                    "E_L": P.E_L.MNTBC,                                
+                    "V_reset": P.V_RESET.MNTBC,
                     "V_th": P.V_TH.MNTBC,           
                     "t_ref": P.T_REF.MNTBC,         
-                    "E_ex": P.EXC_REV,              
-                    "E_in": P.INH_REV,
+                    "E_ex": P.EXC_REV.MNTBC,              
+                    "E_in": P.INH_REV.MNTBC,
                     "tau_rise_ex": P.TAUS_EX_RISE.MNTBC,
                     "tau_decay_ex": P.TAUS_EX_DECAY.MNTBC,  
                 },
@@ -131,16 +131,16 @@ class BrainstemModel(SpikingModel):
             # ------------------------------------------------------
             self.pops[side]["MSO"] = nest.Create(
                 "iaf_cond_beta",
-                P.n_MSOs,
+                P.POP_NUM.n_MSOs,
                 params={
                     "C_m": P.MEMB_CAPS.MSO,
                     "g_L": P.G_LEAK.MSO,
-                    "E_L": P.E_L,                                
-                    "V_reset": P.V_reset,
+                    "E_L": P.E_L.MSO,                                
+                    "V_reset": P.V_RESET.MSO,
                     "V_th": P.V_TH.MSO,           
                     "t_ref": P.T_REF.MSO,         
-                    "E_ex": P.EXC_REV,              
-                    "E_in": P.INH_REV,
+                    "E_ex": P.EXC_REV.MSO,              
+                    "E_in": P.INH_REV.MSO,
                     "tau_rise_ex": P.TAUS_EX_RISE.MSO,
                     "tau_decay_ex": P.TAUS_EX_DECAY.MSO,
                     "tau_rise_in": P.TAUS_IN_RISE.MSO,
@@ -153,20 +153,42 @@ class BrainstemModel(SpikingModel):
             # ------------------------------------------------------
             self.pops[side]["LSO"] = nest.Create(
                 "iaf_cond_beta",
-                P.n_LSOs,
+                P.POP_NUM.n_LSOs,
                 params={
                     "C_m": P.MEMB_CAPS.LSO,
                     "g_L": P.G_LEAK.LSO,
-                    "E_L": P.E_L,                                
-                    "V_reset": P.V_reset,
+                    "E_L": P.E_L.LSO,                                
+                    "V_reset": P.V_RESET.LSO,
                     "V_th": P.V_TH.LSO,           
                     "t_ref": P.T_REF.LSO,         
-                    "E_ex": P.EXC_REV,              
-                    "E_in": P.INH_REV,
+                    "E_ex": P.EXC_REV.LSO,              
+                    "E_in": P.INH_REV.LSO,
                     "tau_rise_ex": P.TAUS_EX_RISE.LSO,
                     "tau_decay_ex": P.TAUS_EX_DECAY.LSO,
                     "tau_rise_in": P.TAUS_IN_RISE.LSO,
                     "tau_decay_in": P.TAUS_IN_DECAY.LSO,    
+                },
+            )
+
+            # ------------------------------------------------------
+            # SPN (offset detector)
+            # ------------------------------------------------------
+            self.pops[side]["SPN"] = nest.Create(
+                "iaf_cond_beta",
+                P.POP_NUM.n_SPNs,
+                params={
+                    "C_m": P.MEMB_CAPS.SPN,
+                    "g_L": P.G_LEAK.SPN,
+                    "E_L": P.E_L.SPN,                                
+                    "V_reset": P.V_RESET.SPN,
+                    "V_th": P.V_TH.SPN,           
+                    "t_ref": P.T_REF.SPN,         
+                    "E_ex": P.EXC_REV.SPN,              
+                    "E_in": P.INH_REV.SPN,
+                    "tau_rise_ex": P.TAUS_EX_RISE.SPN,
+                    "tau_decay_ex": P.TAUS_EX_DECAY.SPN,
+                    "tau_rise_in": P.TAUS_IN_RISE.SPN,
+                    "tau_decay_in": P.TAUS_IN_DECAY.SPN,    
                 },
             )
                 
@@ -176,8 +198,8 @@ class BrainstemModel(SpikingModel):
                 connect(self.pops[side][pop], self.recs[side][pop], "all_to_all")
 
         # real ANFs (generators) to parrots
-        connect(self.pops["R"]["ANF"], self.pops["R"]["parrot_ANF"], "one_to_one")
-        connect(self.pops["L"]["ANF"], self.pops["L"]["parrot_ANF"], "one_to_one")
+        connect(self.pops["R"]["ANF"], self.pops["R"]["parrot_ANF"], "one_to_one", syn_spec={"delay": 0.01})
+        connect(self.pops["L"]["ANF"], self.pops["L"]["parrot_ANF"], "one_to_one", syn_spec={"delay": 0.01})
 
 
         # ANFs to SBCs
@@ -185,15 +207,17 @@ class BrainstemModel(SpikingModel):
             self.pops["R"]["parrot_ANF"],
             self.pops["R"]["SBC"],
             "x_to_one",
-            syn_spec={"weight": P.SYN_WEIGHTS.ANFs2SBCs},
-            num_sources=P.POP_CONN.ANFs2SBCs,
+            syn_spec={"weight": P.SYN_WEIGHTS.ANFs2SBCs,
+                       "delay": P.SYN_DELAYS.ANFs2SBCs},
+            num_sources=P.POP_CONV.ANFs2SBCs,
         )
         connect(
             self.pops["L"]["parrot_ANF"],
             self.pops["L"]["SBC"],
             "x_to_one",
-            syn_spec={"weight": P.SYN_WEIGHTS.ANFs2SBCs},
-            num_sources=P.POP_CONN.ANFs2SBCs,
+            syn_spec={"weight": P.SYN_WEIGHTS.ANFs2SBCs,
+                       "delay": P.SYN_DELAYS.ANFs2SBCs},
+            num_sources=P.POP_CONV.ANFs2SBCs,
         )
 
         # ANFs to GBCs
@@ -201,55 +225,62 @@ class BrainstemModel(SpikingModel):
             self.pops["R"]["parrot_ANF"],
             self.pops["R"]["GBC"],
             "x_to_one",
-            syn_spec={"weight": P.SYN_WEIGHTS.ANFs2GBCs},
-            num_sources=P.POP_CONN.ANFs2GBCs,
+            syn_spec={"weight": P.SYN_WEIGHTS.ANFs2GBCs,
+                       "delay": P.SYN_DELAYS.ANFs2GBCs},
+            num_sources=P.POP_CONV.ANFs2GBCs,
         )
 
         connect(
             self.pops["L"]["parrot_ANF"],
             self.pops["L"]["GBC"],
             "x_to_one",
-            syn_spec={"weight": P.SYN_WEIGHTS.ANFs2GBCs},
-            num_sources=P.POP_CONN.ANFs2GBCs,
+            syn_spec={"weight": P.SYN_WEIGHTS.ANFs2GBCs,
+                       "delay": P.SYN_DELAYS.ANFs2GBCs},
+            num_sources=P.POP_CONV.ANFs2GBCs,
         )
 
-        # GBCs to LNTBCs
         connect(
             self.pops["R"]["GBC"],
             self.pops["R"]["LNTBC"],
-            "one_to_one",
+            "x_to_one",
             syn_spec={
                 "weight": P.SYN_WEIGHTS.GBCs2LNTBCs,
-                "delay": P.DELAYS.GBCs2LNTBCs,
-            },
+                "delay": P.SYN_DELAYS.GBCs2LNTBCs,
+                },
+            num_sources=P.POP_CONV.GBCs2LNTBCs,
         )
+
         connect(
             self.pops["L"]["GBC"],
             self.pops["L"]["LNTBC"],
-            "one_to_one",
+            "x_to_one",
             syn_spec={
                 "weight": P.SYN_WEIGHTS.GBCs2LNTBCs,
-                "delay": P.DELAYS.GBCs2LNTBCs,
+                "delay": P.SYN_DELAYS.GBCs2LNTBCs,
             },
+            num_sources=P.POP_CONV.GBCs2LNTBCs,
         )
-        # GBCs to MNTBCs
+
         connect(
             self.pops["R"]["GBC"],
             self.pops["L"]["MNTBC"],
-            "one_to_one",
+            "x_to_one",
             syn_spec={
                 "weight": P.SYN_WEIGHTS.GBCs2MNTBCs,
-                "delay": P.DELAYS.GBCs2MNTBCs,
+                "delay": P.SYN_DELAYS.GBCs2MNTBCs,
             },
+            num_sources=P.POP_CONV.GBCs2MNTBCs,
         )
+
         connect(
             self.pops["L"]["GBC"],
             self.pops["R"]["MNTBC"],
-            "one_to_one",
+            "x_to_one",
             syn_spec={
                 "weight": P.SYN_WEIGHTS.GBCs2MNTBCs,
-                "delay": P.DELAYS.GBCs2MNTBCs,
+                "delay": P.SYN_DELAYS.GBCs2MNTBCs,
             },
+            num_sources=P.POP_CONV.GBCs2MNTBCs,
         )
 
         # MSO
@@ -262,9 +293,9 @@ class BrainstemModel(SpikingModel):
             "x_to_one",
             syn_spec={
                 "weight": P.SYN_WEIGHTS.SBCs2MSO,
-                "delay": P.DELAYS.SBCs2MSO_exc_ipsi,
+                "delay": P.SYN_DELAYS.SBCs2MSOipsi,
             },
-            num_sources=P.SBCs2MSOs,
+            num_sources=P.POP_CONV.SBCs2MSOs,
         )
         #       contra
         connect(
@@ -273,9 +304,9 @@ class BrainstemModel(SpikingModel):
             "x_to_one",
             syn_spec={
                 "weight": P.SYN_WEIGHTS.SBCs2MSO,
-                "delay": P.DELAYS.SBCs2MSO_exc_contra,
+                "delay": P.SYN_DELAYS.SBCs2MSOcontra,
             },
-            num_sources=P.SBCs2MSOs,
+            num_sources=P.POP_CONV.SBCs2MSOs,
         )
         # l_MSO
         #       ipsi
@@ -285,9 +316,9 @@ class BrainstemModel(SpikingModel):
             "x_to_one",
             syn_spec={
                 "weight": P.SYN_WEIGHTS.SBCs2MSO,
-                "delay": P.DELAYS.SBCs2MSO_exc_ipsi,
+                "delay": P.SYN_DELAYS.SBCs2MSOipsi,
             },
-            num_sources=P.SBCs2MSOs,
+            num_sources=P.POP_CONV.SBCs2MSOs,
         )
         #       contra
         connect(
@@ -296,77 +327,109 @@ class BrainstemModel(SpikingModel):
             "x_to_one",
             syn_spec={
                 "weight": P.SYN_WEIGHTS.SBCs2MSO,
-                "delay": P.DELAYS.SBCs2MSO_exc_contra,
+                "delay": P.SYN_DELAYS.SBCs2MSOcontra,
             },
-            num_sources=P.SBCs2MSOs,
+            num_sources=P.POP_CONV.SBCs2MSOs,
         )
         # From LNTBCs (inhibition), ipsi
         connect(
             self.pops["R"]["LNTBC"],
             self.pops["R"]["MSO"],
-            "one_to_one",
+            "x_to_one",
             syn_spec={
                 "weight": P.SYN_WEIGHTS.LNTBCs2MSO,
-                "delay": P.DELAYS.LNTBCs2MSO_inh_ipsi,
+                "delay": P.SYN_DELAYS.LNTBCs2MSOipsi,
             },
+            num_sources=P.POP_CONV.LNTBCs2MSOs,
         )
         # From MNTBCs (inhibition) contra
         connect(
             self.pops["R"]["MNTBC"],
             self.pops["R"]["MSO"],
-            "one_to_one",
+            "x_to_one",
             syn_spec={
                 "weight": P.SYN_WEIGHTS.MNTBCs2MSO,
-                "delay": P.DELAYS.MNTBCs2MSO_inh_contra,
+                "delay": P.SYN_DELAYS.MNTBCs2MSOcontra,
             },
+            num_sources=P.POP_CONV.MNTBCs2MSOs,
         )
         # From LNTBCs (inhibition) ipsi
         connect(
             self.pops["L"]["LNTBC"],
             self.pops["L"]["MSO"],
-            "one_to_one",
+            "x_to_one",
             syn_spec={
                 "weight": P.SYN_WEIGHTS.LNTBCs2MSO,
-                "delay": P.DELAYS.LNTBCs2MSO_inh_ipsi,
+                "delay": P.SYN_DELAYS.LNTBCs2MSOipsi,
             },
+            num_sources=P.POP_CONV.LNTBCs2MSOs,
         )
         # From MNTBCs (inhibition) contra
         connect(
             self.pops["L"]["MNTBC"],
             self.pops["L"]["MSO"],
-            "one_to_one",
+            "x_to_one",
             syn_spec={
                 "weight": P.SYN_WEIGHTS.MNTBCs2MSO,
-                "delay": P.DELAYS.MNTBCs2MSO_inh_contra,
+                "delay": P.SYN_DELAYS.MNTBCs2MSOcontra,
             },
+            num_sources=P.POP_CONV.MNTBCs2MSOs,
         )
 
         # LSO
+
         connect(
             self.pops["R"]["SBC"],
             self.pops["R"]["LSO"],
             "x_to_one",
-            syn_spec={"weight": P.SYN_WEIGHTS.SBCs2LSO},
-            num_sources=P.SBCs2LSOs,
+            syn_spec={"weight": P.SYN_WEIGHTS.SBCs2LSO,
+                       "delay": P.SYN_DELAYS.SBCs2LSO},
+            num_sources=P.POP_CONV.SBCs2LSOs,
         )
+        
         connect(
             self.pops["L"]["SBC"],
             self.pops["L"]["LSO"],
             "x_to_one",
-            syn_spec={"weight": P.SYN_WEIGHTS.SBCs2LSO},
-            num_sources=P.SBCs2LSOs,
+            syn_spec={"weight": P.SYN_WEIGHTS.SBCs2LSO,
+                       "delay": P.SYN_DELAYS.SBCs2LSO},
+            num_sources=P.POP_CONV.SBCs2LSOs,
         )
+        
         connect(
             self.pops["R"]["MNTBC"],
             self.pops["R"]["LSO"],
-            "one_to_one",
-            syn_spec={"weight": P.SYN_WEIGHTS.MNTBCs2LSO},
+            "x_to_one",
+            syn_spec={"weight": P.SYN_WEIGHTS.MNTBCs2LSO,
+                       "delay": P.SYN_DELAYS.MNTBCs2LSO},
+            num_sources=P.POP_CONV.MNTBCs2LSOs, 
         )
+
         connect(
             self.pops["L"]["MNTBC"],
             self.pops["L"]["LSO"],
-            "one_to_one",
-            syn_spec={"weight": P.SYN_WEIGHTS.MNTBCs2LSO},
+            "x_to_one",
+            syn_spec={"weight": P.SYN_WEIGHTS.MNTBCs2LSO,
+                       "delay": P.SYN_DELAYS.MNTBCs2LSO},
+            num_sources=P.POP_CONV.MNTBCs2LSOs, 
+        )
+
+        connect(
+            self.pops["R"]["MNTBC"],
+            self.pops["R"]["SPN"],
+            "x_to_one",
+            syn_spec={"weight": P.SYN_WEIGHTS.MNTBCs2SPN,
+                       "delay": P.SYN_DELAYS.MNTBCs2SPN},
+            num_sources=P.POP_CONV.MNTBCs2SPNs, 
+        )
+
+        connect(
+            self.pops["L"]["MNTBC"],
+            self.pops["L"]["SPN"],
+            "x_to_one",
+            syn_spec={"weight": P.SYN_WEIGHTS.MNTBCs2SPN,
+                       "delay": P.SYN_DELAYS.MNTBCs2SPN},
+            num_sources=P.POP_CONV.MNTBCs2SPNs, 
         )
 
     def simulate(self, time: Union[float, int]):

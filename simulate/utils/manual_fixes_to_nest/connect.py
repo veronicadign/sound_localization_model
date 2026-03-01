@@ -1,6 +1,5 @@
 import nest
 
-
 def connect(
     pre,
     post,
@@ -14,10 +13,25 @@ def connect(
             raise Exception(
                 "when using custom conn_spec 'x_to_one' argument 'num_sources' must be set"
             )
-        assert num_sources is not None
-        for i in range(len(post)):
+        
+        num_pre = len(pre)
+        num_post = len(post)
+        
+        # Calculate the step size - can be fractional
+        step = (num_pre - num_sources) / (num_post - 1) if num_post > 1 else 0
+        
+        for i in range(num_post):
+            # Calculate start index (can use fractional step)
+            start_idx = int(round(i * step))
+            end_idx = start_idx + num_sources
+            
+            # Ensure we don't exceed bounds
+            if end_idx > num_pre:
+                end_idx = num_pre
+                start_idx = num_pre - num_sources
+            
             nest.Connect(
-                pre[num_sources * i : num_sources * (i + 1)],
+                pre[start_idx:end_idx],
                 post[i],
                 "all_to_all",
                 syn_spec,
