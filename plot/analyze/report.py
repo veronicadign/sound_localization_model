@@ -23,6 +23,7 @@ plt.rcParams["axes.grid"] = True
 plt.rcParams['axes.titlesize'] = 12
 plt.rcParams['axes.titleweight']= 'bold'
 plt.rcParams['axes.spines.top']= False
+plt.rcParams['axes.spines.right']= False
 plt.rcParams['axes.labelsize'] = 10
 plt.rcParams['xtick.labelsize'] = 12   # Size of x-axis tick labels
 plt.rcParams['ytick.labelsize'] = 12   # Size of y-axis tick labels
@@ -331,173 +332,173 @@ def range_around_center(center, radius, min_val=0, max_val=np.iinfo(np.int64).ma
     return np.arange(start, end)
 
 def calculate_vector_strength_from_result(
-        # result file (loaded)
         res,
         angle,
-        side,
         pop,
-        freq = None, # if None: freq = res['basesound'].frequency
-        color = None,
-        cf_target = None,
+        side='L',
+        freq=None,            # if None: freq = res['basesound'].frequency
+        color=None,
+        cf_target=None,
         bandwidth=0,
-        n_bins = 7,
-        figsize = (7,5),
-        display=False, # if True also return fig, show() in caller function
-        x_ax = "phase",  # can be "phase" or "time"
-        ylim = None,    # Added ylim parameter
-        center_at_peak = False  # Center histogram so that the peak bin is at zero
+        n_bins=7,
+        figsize=(7,5),
+        display=True,
+        x_ax="phase",         # "phase" or "time"
+        ylim=None,
+        center_at_peak=False,
+        y_ax="percent"        # "percent" (original) or "ashida"
         ):
-    
+
+    from collections import defaultdict
+    import numpy as np
+    import matplotlib.pyplot as plt
+
     spikes = res["angle_to_rate"][angle][side][pop]
+
     sender2times = defaultdict(list)
     for sender, time in zip(spikes["senders"], spikes["times"]):
         if time <= 1000:
             sender2times[sender].append(time)
+
     sender2times = {k: np.array(v) / 1000 for k, v in sender2times.items()}
+
     num_neurons = len(spikes["global_ids"])
-    cf = greenwood_cf_array(CFMIN/ b2.Hz, CFMAX/ b2.Hz, num_neurons) * b2.Hz
+    cf = greenwood_cf_array(CFMIN / b2.Hz, CFMAX / b2.Hz, num_neurons) / Hz
 
-    if(freq == None):
-        if(type(res['basesound'])  in (Tone,ToneBurst)):
-            freq = res['basesound'].frequency
+    if freq is None:
+        if type(res["sounds"]["base_sound"]) in (Tone, ToneBurst):
+            freq = res["sounds"]["base_sound"].frequency / Hz
         else:
-            print("Frequency needs to be specified for non-Tone sounds")
-    else:
-        freq = freq * Hz
+            raise ValueError("Frequency must be specified for non-Tone sounds")
 
-    if(cf_target == None):    
+    if cf_target is None:
         _, center_neuron_for_freq = take_closest(cf, freq)
     else:
-        _, center_neuron_for_freq = take_closest(cf, cf_target *Hz)
+        _, center_neuron_for_freq = take_closest(cf, cf_target)
 
     old2newid = {oldid: i for i, oldid in enumerate(spikes["global_ids"])}
     new2oldid = {v: k for k, v in old2newid.items()}
 
     relevant_neurons = range_around_center(
-        center_neuron_for_freq, radius=bandwidth, max_val=num_neurons - 1
+        center_neuron_for_freq,
+        radius=bandwidth,
+        max_val=num_neurons - 1
     )
+
     relevant_neurons_ids = [new2oldid[i] for i in relevant_neurons]
+    spike_times_list = [sender2times[i] for i in relevant_neurons_ids]
 
-    spike_times_list = [sender2times[i] for i in relevant_neurons_ids]  
-    spike_times_array = np.concatenate(spike_times_list)  # Flatten into a single array
+    if len(spike_times_list) == 0:
+        return 0 if not display else (0, None)
 
-    phases = get_spike_phases(
-        spike_times= spike_times_array, frequency=freq / Hz
-    )
-    vs = calculate_vector_strength(
-        spike_times=spike_times_array, frequency=freq / Hz
-    )
+    spike_times_array = np.concatenate(spike_times_list)
+    total_spikes = len(spike_times_array)
+
+    phases = get_spike_phases(spike_times_array, freq)
+    vs = calculate_vector_strength(spike_times_array, freq)
 
     if not display:
-        return (vs)
-    if color == None:
-        if side == 'L': color = 'm'
-        elif side == 'R': color = 'g'
-        else: color = 'k'
-    
+        return vs
+
+    if color is None:
+        color = {'L': 'm', 'R': 'g'}.get(side, 'b')
+
     fig, ax = plt.subplots(1, 1, figsize=figsize)
-    
-    # Get total number of spikes for percentage calculation
-    total_spikes = len(spike_times_array)
-    
+
+    # =========================
+    # PHASE AXIS
+    # =========================
     if x_ax == "phase":
-        # Initial binning to find the peak
+
         orig_bins = np.linspace(0, 2 * np.pi, n_bins + 1)
-        hist_values, _ = np.histogram(phases, bins=orig_bins)
-        peak_bin_idx = np.argmax(hist_values)
-        
+        hist_raw, _ = np.histogram(phases, bins=orig_bins)
+        peak_bin_idx = np.argmax(hist_raw)
+
         if center_at_peak:
-            # Calculate the center of the peak bin
-            bin_centers = (orig_bins[:-1] + orig_bins[1:]) / 2
-            peak_center = bin_centers[peak_bin_idx]
-            
-            # Create a shift that will center the peak at 0
-            shift = peak_center - np.pi  # Shift to make peak at π, then will offset by π
-            
-            # Create bins centered around the peak
+            bin_centers_orig = (orig_bins[:-1] + orig_bins[1:]) / 2
+            peak_center = bin_centers_orig[peak_bin_idx]
+            shifted_phases = np.angle(np.exp(1j * (phases - peak_center)))
+
             bins = np.linspace(-np.pi, np.pi, n_bins + 1)
-            shifted_phases = np.mod(phases - shift, 2 * np.pi) - np.pi
-            
-            # Plot the shifted histogram as percentages
-            hist1, _ = np.histogram(shifted_phases, bins=bins)
-            hist_percent = (hist1 / total_spikes) * 100  # Convert to percentage
-            
+            values = shifted_phases
             bin_centers = (bins[:-1] + bins[1:]) / 2
-            ax.bar(bin_centers, hist_percent, width=2 * np.pi / n_bins, alpha=0.7, color=color)
-            
-            # Set x-ticks in terms of π
-            pi_ticks = np.array([-1, -0.5, 0, 0.5, 1]) * np.pi
-            pi_labels = ['-0.5', '', '0', '', '0.5']
         else:
-            # Original histogram from 0 to 2π
-            bins = np.linspace(0, 2 * np.pi, n_bins + 1)
+            bins = orig_bins
+            values = phases
             bin_centers = (bins[:-1] + bins[1:]) / 2
-            
-            hist1, _ = np.histogram(phases, bins=bins)
-            hist_percent = (hist1 / total_spikes) * 100  # Convert to percentage
-            
-            ax.bar(bin_centers, hist_percent, width=2 * np.pi / n_bins, alpha=0.7, color=color)
-            
-            # Set x-ticks in terms of π
-            pi_ticks = np.array([0, 0.5, 1, 1.5, 2]) * np.pi
-            pi_labels = ['0', '', '0.5', '', '1']
-        
-        ax.set_xticks(pi_ticks)
-        ax.set_xticklabels(pi_labels)
+
+        hist1, _ = np.histogram(values, bins=bins)
+        bin_width = bins[1] - bins[0]
+
+        if y_ax == "percent":
+            hist_vals = (hist1 / total_spikes) * 100
+            ylabel = "Spikes / bin (% of total)"
+        elif y_ax == "ashida":
+            hist_vals = hist1 / (total_spikes * bin_width)
+            ylabel = "Probability density (rad$^{-1}$)"
+        else:
+            raise ValueError("y_ax must be 'percent' or 'ashida'")
+
+        ax.bar(bin_centers, hist_vals, width=bin_width, alpha=0.7, color=color)
+
         ax.set_xlabel("Phase (cycles)")
-        
+        ax.set_xticks(np.array([0, 0.5, 1, 1.5, 2]) * np.pi if not center_at_peak
+                      else np.array([-1, -0.5, 0, 0.5, 1]) * np.pi)
+        ax.set_xticklabels(['0', '', '0.5', '', '1'] if not center_at_peak
+                           else ['-0.5', '', '0', '', '0.5'])
+
+    # =========================
+    # TIME AXIS
+    # =========================
     elif x_ax == "time":
-        # Convert phases to time in milliseconds
-        period_ms = 1000 / (freq / Hz)  # Period in milliseconds
+
+        period_ms = 1000 / freq
         time_values = (phases / (2 * np.pi)) * period_ms
-        
-        # Initial binning to find the peak
-        orig_time_bins = np.linspace(0, period_ms, n_bins + 1)
-        hist_values, _ = np.histogram(time_values, bins=orig_time_bins)
-        peak_bin_idx = np.argmax(hist_values)
-        
+
+        orig_bins = np.linspace(0, period_ms, n_bins + 1)
+        hist_raw, _ = np.histogram(time_values, bins=orig_bins)
+        peak_bin_idx = np.argmax(hist_raw)
+
         if center_at_peak:
-            # Calculate the center of the peak bin
-            bin_centers = (orig_time_bins[:-1] + orig_time_bins[1:]) / 2
-            peak_center = bin_centers[peak_bin_idx]
-            
-            # Create a shift that will center the peak at 0
-            shift = peak_center - period_ms/2  # Shift to make peak at period/2, then will offset
-            
-            # Create bins centered around the peak
-            time_bins = np.linspace(-period_ms/2, period_ms/2, n_bins + 1)
-            shifted_time_values = np.mod(time_values - shift, period_ms) - period_ms/2
-            
-            # Plot the shifted histogram as percentages
-            hist1, _ = np.histogram(shifted_time_values, bins=time_bins)
-            hist_percent = (hist1 / total_spikes) * 100  # Convert to percentage
-            
-            time_bin_centers = (time_bins[:-1] + time_bins[1:]) / 2
-            ax.bar(time_bin_centers, hist_percent, width=period_ms / n_bins, alpha=0.7, color=color)
+            bin_centers_orig = (orig_bins[:-1] + orig_bins[1:]) / 2
+            peak_center = bin_centers_orig[peak_bin_idx]
+            shifted_times = np.mod(time_values - peak_center + period_ms/2,
+                                   period_ms) - period_ms/2
+
+            bins = np.linspace(-period_ms/2, period_ms/2, n_bins + 1)
+            values = shifted_times
+            bin_centers = (bins[:-1] + bins[1:]) / 2
         else:
-            # Original time from 0 to period
-            time_bins = np.linspace(0, period_ms, n_bins + 1)
-            time_bin_centers = (time_bins[:-1] + time_bins[1:]) / 2
-            
-            hist1, _ = np.histogram(time_values, bins=time_bins)
-            hist_percent = (hist1 / total_spikes) * 100  # Convert to percentage
-            
-            ax.bar(time_bin_centers, hist_percent, width=period_ms / n_bins, alpha=0.7, color=color)
-        
+            bins = orig_bins
+            values = time_values
+            bin_centers = (bins[:-1] + bins[1:]) / 2
+
+        hist1, _ = np.histogram(values, bins=bins)
+        bin_width = bins[1] - bins[0]
+
+        if y_ax == "percent":
+            hist_vals = (hist1 / total_spikes) * 100
+            ylabel = "Spikes / bin (% of total)"
+        elif y_ax == "ashida":
+            hist_vals = hist1 / (total_spikes * bin_width)
+            ylabel = "Probability density (ms$^{-1}$)"
+        else:
+            raise ValueError("y_ax must be 'percent' or 'ashida'")
+
+        ax.bar(bin_centers, hist_vals, width=bin_width, alpha=0.7, color=color)
         ax.set_xlabel("Time [ms]")
-    
-    # Set y-axis label to percentage
-    ax.set_ylabel("Spikes/bin (% of total)")
-    
-    # Set y-axis limits if provided
+
+    ax.set_ylabel(ylabel)
+
     if ylim is not None:
         ax.set_ylim(ylim)
-    
-    ax.set_title(f"R={vs:.3f}")
+
+    ax.set_title(f"R = {vs:.3f}")
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
+
     plt.show()
-    return (vs, fig)
+    return vs, fig
 
 def calculate_vector_strength_from_result_polar(
         res,
@@ -905,7 +906,7 @@ def calculate_firing_rates(angle_to_rate, pop, sides, angles, duration, cf_inter
     
     # Get frequency space
     num_neurons = len(angle_to_rate[0]['L'][pop]["global_ids"])
-    cf = greenwood_cf_array(CFMIN/ b2.Hz, CFMAX/ b2.Hz, num_neurons)*b2.Hz
+    cf = greenwood_cf_array(CFMIN/ b2.Hz, CFMAX/ b2.Hz, num_neurons)/b2.Hz
     
     if cf_interval is None:
         # Simple case - use all neurons
@@ -947,8 +948,8 @@ def calculate_firing_rates(angle_to_rate, pop, sides, angles, duration, cf_inter
         
         for angle in angles:
             # Find indices in CF array corresponding to interval bounds
-            _, ymin_idx = take_closest(cf, cf_interval[0]*Hz)
-            _, ymax_idx = take_closest(cf, cf_interval[1]*Hz)
+            _, ymin_idx = take_closest(cf, cf_interval[0])
+            _, ymax_idx = take_closest(cf, cf_interval[1])
 
             # Calculate actual neuron IDs from global_ids and indices
             base_id = angle_to_rate[angle][side][pop]["global_ids"][0]
@@ -1541,43 +1542,193 @@ def draw_rate_vs_angle_pop_multi(
     plt.tight_layout()
     return ax, original_values if norm else ax
 
-def plot_anf_rasterplot(
+def plot_rasterplot(
     spikes_series,
-    figsize=(10, 5),
-    color="black",
-    linewidth=0.5,
-    remove_yticks=False,
-    title="ANF Raster Plot",
+    y_ax='cf_custom',
+    f_ticks=[125, 1000, 10000],
+    cf_bin_size=50, #cells
+    psth_bin_size=1, #ms
+    hist_rate=True,
+    figsize=(15, 8),
+    color="b",
+    xlim=None,
+    ylim=None,
 ):
     """
-    Plot a raster plot from a Pandas Series of spike times.
-    
-    spikes_series: pd.Series
-        Each entry is a list of spike times for one neuron.
-    """
-    fig, ax = plt.subplots(figsize=figsize)
+    Raster + population histogram + PSTH from a Pandas Series of spike times.
 
-    ax.eventplot(
-        spikes_series.values,
-        colors=color,
-        linewidths=linewidth
+    spikes_series:
+        index = neuron id
+        values = list of spike times (seconds)
+    """
+
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from matplotlib.gridspec import GridSpec
+
+    gids = np.array(spikes_series.index)
+    n_neurons = len(gids)
+
+    # -------------------------------------------------------
+    # flatten Series → times + senders
+    # -------------------------------------------------------
+    times = []
+    senders = []
+
+    for gid, ts in spikes_series.items():
+        if len(ts) > 0:
+            t = np.array(ts) * 1000.0
+            times.append(t)
+            senders.append(np.full(len(t), gid))
+
+    if len(times):
+        times = np.concatenate(times)
+        senders = np.concatenate(senders)
+    else:
+        times = np.array([])
+        senders = np.array([])
+
+    # -------------------------------------------------------
+    # xlim
+    # -------------------------------------------------------
+    if xlim is None:
+        xmax = times.max() if len(times) else 1
+        xlim = [0, xmax]
+
+    # -------------------------------------------------------
+    # CF mapping (same as your main function)
+    # -------------------------------------------------------
+    cf_full = greenwood_cf_array(CFMIN/b2.Hz, CFMAX/b2.Hz, n_neurons) / b2.Hz
+
+    if ylim is None:
+        ylim = [cf_full.min(), cf_full.max()]
+
+    _, ymin_idx = take_closest(cf_full, ylim[0])
+    _, ymax_idx = take_closest(cf_full, ylim[1])
+
+    # -------------------------------------------------------
+    # filtering
+    # -------------------------------------------------------
+    mask_t = (times >= xlim[0]) & (times <= xlim[1])
+    times_f = times[mask_t]
+    senders_f = senders[mask_t]
+    local_ids_f = senders_f - gids[0]
+
+    # -------------------------------------------------------
+    # layout: raster + hist | psth
+    # -------------------------------------------------------
+    fig = plt.figure(figsize=figsize)
+    gs = GridSpec(
+        2, 2,
+        width_ratios=[5, 1.5],
+        height_ratios=[3, 1],
+        wspace=0.05,
+        hspace=0.25
     )
 
-    ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Neuron index")
+    ax_raster = fig.add_subplot(gs[0, 0])
+    ax_hist   = fig.add_subplot(gs[0, 1], sharey=ax_raster)
+    ax_psth   = fig.add_subplot(gs[1, 0], sharex=ax_raster)
 
-    if remove_yticks:
-        ax.set_yticks([])
+    # -------------------------------------------------------
+    # Y axis modes
+    # -------------------------------------------------------
+    if y_ax in ["neurons", "cf_custom"]:
+        y_values = senders_f
+        ax_raster.set_ylim([gids[0] + ymin_idx, gids[0] + ymax_idx])
+        ax_raster.set_ylabel("Neuron ID")
 
-    ax.set_title(title)
-    plt.tight_layout()
-    return fig, ax
+        if y_ax == "cf_custom":
+            ax_raster.set_ylabel("CF [Hz]")
+            tick_pos = []
+            for f in f_ticks:
+                _, idx = take_closest(cf_full, f)
+                tick_pos.append(gids[0] + idx)
+            ax_raster.set_yticks(tick_pos)
+            ax_raster.set_yticklabels(f_ticks)
+
+    elif y_ax == "cf":
+        y_values = cf_full[local_ids_f]
+        ax_raster.set_ylabel("CF [Hz]")
+        ax_raster.set_ylim(ylim)
+
+    else:
+        raise ValueError("unknown y_ax mode")
+
+    # -------------------------------------------------------
+    # RASTER
+    # -------------------------------------------------------
+    ax_raster.plot(times_f, y_values, '.', color=color, markersize=1)
+    ax_raster.set_xlim(xlim)
+
+
+    # -------------------------------------------------------
+    # POPULATION HISTOGRAM (same math as your first function)
+    # -------------------------------------------------------
+    spike_count = np.bincount(local_ids_f, minlength=n_neurons)
+
+    bins_neurons = np.arange(0, n_neurons, cf_bin_size)
+
+    grouped_counts = np.array([
+        spike_count[i:i+cf_bin_size].sum()
+        for i in bins_neurons
+    ])
+
+    grouped_y = np.array([
+        np.arange(n_neurons)[i:i+cf_bin_size].mean()
+        for i in bins_neurons
+    ])
+
+    mask_vis = (grouped_y >= ymin_idx) & (grouped_y <= ymax_idx)
+
+    grouped_y_plot = gids[0] + grouped_y[mask_vis]
+    grouped_counts = grouped_counts[mask_vis]
+
+    if hist_rate:
+        grouped_values = (grouped_counts / xlim[1]) * 1000.0 / cf_bin_size
+        xlabel = "Avg rate [Hz]"
+    else:
+        grouped_values = grouped_counts
+        xlabel = "Spike count"
+
+    avg_value = grouped_values.mean() if len(grouped_values) else 0
+
+    ax_hist.barh(grouped_y_plot, grouped_values,
+                 height=0.8 * cf_bin_size,
+                 color=color, alpha=0.4)
+
+    ax_hist.axvline(avg_value, linestyle='--', linewidth=2, color=color)
+    ax_hist.set_xlabel(xlabel)
+    ax_hist.tick_params(axis='y', labelleft=False)
+
+    # -------------------------------------------------------
+    # PSTH  ✅ (this was missing before)
+    # -------------------------------------------------------
+    bins = np.arange(xlim[0], xlim[1] + psth_bin_size, psth_bin_size)
+    counts, _ = np.histogram(times_f, bins=bins)
+
+    if hist_rate:
+        n_visible = ymax_idx - ymin_idx + 1
+        rates = (counts * 1000.0) / (psth_bin_size * n_visible)
+        avg_rate = rates.mean() if len(rates) else 0
+        ax_psth.plot(bins[:-1], rates, color=color, alpha=0.8)
+        ax_psth.axhline(avg_rate, linestyle='--', linewidth=2, color=color)
+        ax_psth.set_ylabel("Rate [Hz]")
+    else:
+        ax_psth.bar(bins[:-1], counts, width=psth_bin_size, alpha=0.4, color=color)
+        ax_psth.set_ylabel("Spike count")
+
+    ax_psth.set_xlabel("Time (ms)")
+
+    print(f"Avg firing rate: {avg_value:.2f} Hz")
+
+    return fig, (ax_raster, ax_hist, ax_psth)
 
 def plot_sound(
     sound,
     figsize=(6, 4),
     title=None,
-    time_in_ms=False,
+    time_in_ms=True,
     xlim = None,
     ylim = None,
     color = 'b'):
@@ -1874,6 +2025,7 @@ def draw_rate_vs_angle(
     pop='LSO',
     rate=True,
     cf_interval=None,
+    time_interval=None,       # [t_start, t_end] in ms
     sides=None,
     color=None,
     show_hist=True,
@@ -1890,7 +2042,10 @@ def draw_rate_vs_angle(
     - Handles single dataset or list of datasets
     - Supports all normalization options
     - Can plot single population or all
-    - Adds SEM/STD error and shaded CI
+    - Adds SEM/STD error ONLY when multiple datasets are provided
+    - time_interval: [t_start, t_end] in ms — restrict spike counting to this window
+    - cf_interval:   [cf_min, cf_max] in Hz — restrict spike counting to this CF band
+      Rate is always spikes / neuron_in_band / time_window (Hz).
     """
 
     # Accept list of datasets
@@ -1903,14 +2058,43 @@ def draw_rate_vs_angle(
         multi_mode = False
 
     angle_to_rate = data["angle_to_rate"]
-    default_duration = data["basesound"].sound.duration / b2.ms \
-                       if "basesound" in data else data["sounds"]["base_sound"].sound.duration / b2.ms
+    default_duration = (
+        data["basesound"].sound.duration / b2.ms
+        if "basesound" in data
+        else data["sounds"]["base_sound"].sound.duration / b2.ms
+    )
     duration = data.get("simulation_time", default_duration) * b2.ms
+
+    # ------------------------------------------------------------------
+    # Helper: filter spikes by time window only.
+    # CF filtering is delegated to calculate_firing_rates so that the
+    # neuron-count denominator is computed correctly there.
+    # ------------------------------------------------------------------
+    def _filter_spike_dict(spike_dict, time_interval):
+        times   = spike_dict["times"]
+        senders = spike_dict["senders"]
+        gids    = spike_dict["global_ids"]
+
+        if time_interval is None:
+            return spike_dict
+
+        mask = (times >= time_interval[0]) & (times <= time_interval[1])
+        return {
+            "times":      times[mask],
+            "senders":    senders[mask],
+            "global_ids": gids,   # unchanged — needed for neuron count
+        }
+
+    # Effective duration for rate denominator
+    if time_interval is not None:
+        effective_duration = (time_interval[1] - time_interval[0]) * b2.ms
+    else:
+        effective_duration = duration
 
     def _draw_single_pop_subplot(ax, pop_name):
 
-        angles = list(angle_to_rate.keys())
-        sides_local = ["L","R"] if sides is None else sides
+        angles      = list(angle_to_rate.keys())
+        sides_local = ["L", "R"] if sides is None else sides
 
         # Side colors
         if isinstance(color, dict):
@@ -1926,11 +2110,48 @@ def draw_rate_vs_angle(
 
         for d in multi_data:
             angle_to_rate_d = d["angle_to_rate"]
-            duration_d = (d.get("simulation_time",
-                               data["sounds"]["base_sound"].sound.duration / b2.ms) * b2.ms)
 
+            # Pre-filter by time only (CF is handled inside calculate_firing_rates)
+            if time_interval is not None:
+                angle_to_rate_filtered = {}
+                for angle in angles:
+                    angle_to_rate_filtered[angle] = {}
+                    for side in sides_local:
+                        angle_to_rate_filtered[angle][side] = {}
+                        for p in angle_to_rate_d[angle][side]:
+                            if p == pop_name:
+                                angle_to_rate_filtered[angle][side][p] = \
+                                    _filter_spike_dict(
+                                        angle_to_rate_d[angle][side][p],
+                                        time_interval
+                                    )
+                            else:
+                                angle_to_rate_filtered[angle][side][p] = \
+                                    angle_to_rate_d[angle][side][p]
+                atr_to_use = angle_to_rate_filtered
+            else:
+                atr_to_use = angle_to_rate_d
+
+            # Effective duration: shrink to time window if given
+            if time_interval is not None:
+                dur_d = effective_duration
+            else:
+                dur_d = (
+                    d.get(
+                        "simulation_time",
+                        data["sounds"]["base_sound"].sound.duration / b2.ms,
+                    )
+                    * b2.ms
+                )
+
+            # Always forward cf_interval — calculate_firing_rates handles CF neuron count
             tot_d, avg_d, _ = calculate_firing_rates(
-                angle_to_rate_d, pop_name, sides_local, angles, duration_d, cf_interval
+                atr_to_use,
+                pop_name,
+                sides_local,
+                angles,
+                dur_d,
+                cf_interval,  # always passed, never None-d out
             )
 
             for side in sides_local:
@@ -1939,50 +2160,55 @@ def draw_rate_vs_angle(
 
         # Mean across datasets
         tot_spikes = {side: np.mean(all_tot[side], axis=0) for side in sides_local}
-        avg_neuron_rate = {side: np.mean(all_avg[side], axis=0) for side in sides_local}
+        avg_neuron_rate = {
+            side: np.mean(all_avg[side], axis=0) for side in sides_local
+        }
 
-        # Error metric (sem or std)
-        if error == 'sem':
-            err_factor = lambda x: np.std(x, axis=0) / np.sqrt(len(multi_data))
-        elif error == 'std':
-            err_factor = lambda x: np.std(x, axis=0)
+        # Error metric (ONLY meaningful in multi_mode)
+        if multi_mode:
+            if error == "sem":
+                err_factor = lambda x: np.std(x, axis=0) / np.sqrt(len(multi_data))
+            elif error == "std":
+                err_factor = lambda x: np.std(x, axis=0)
+            else:
+                raise ValueError("error must be 'sem' or 'std'")
+            print("ERROR", err_factor)
+            tot_err = {side: err_factor(all_tot[side]) for side in sides_local}
+            avg_err = {side: err_factor(all_avg[side]) for side in sides_local}
         else:
-            raise ValueError("error must be 'sem' or 'std'")
-
-        tot_err = {side: err_factor(all_tot[side]) for side in sides_local}
-        avg_err = {side: err_factor(all_avg[side]) for side in sides_local}
+            tot_err = avg_err = None
 
         # Select which rate to plot
         if rate is True:
             plotted_rate = avg_neuron_rate
-            plotted_err = avg_err
-            ylabel_text = "Avg Firing Rate [Hz]"
+            plotted_err  = avg_err
+            ylabel_text  = "Avg Firing Rate [Hz]"
 
         elif rate is False:
             plotted_rate = tot_spikes
-            plotted_err = tot_err
-            ylabel_text = "Population Firing Rate [Hz]"
+            plotted_err  = tot_err
+            ylabel_text  = "Population Firing Rate [Hz]"
 
-        elif rate == 'mm_norm':
+        elif rate == "mm_norm":
             plotted_rate, _ = normalize_rates(avg_neuron_rate, sides_local)
-            plotted_err = avg_err
-            ylabel_text = "Min-Max Normalized Rate"
+            plotted_err      = avg_err
+            ylabel_text      = "Min-Max Normalized Rate"
 
-        elif rate == 'max_norm':
+        elif rate == "max_norm":
             plotted_rate = {
-                side: np.array(avg_neuron_rate[side]) /
-                      np.max(avg_neuron_rate[side])
+                side: np.array(avg_neuron_rate[side])
+                / np.max(avg_neuron_rate[side])
                 for side in sides_local
             }
             plotted_err = avg_err
             ylabel_text = "Max Normalized Rate"
 
-        elif rate == 'diff':
+        elif rate == "diff":
             plotted_rate = {
-                "L": np.array(avg_neuron_rate["L"]) / np.max(avg_neuron_rate["L"]),
-                "R": np.array(avg_neuron_rate["R"]) / np.max(avg_neuron_rate["R"]),
-                "L_pop": np.array(tot_spikes["L"]) / np.max(tot_spikes["L"]),
-                "R_pop": np.array(tot_spikes["R"]) / np.max(tot_spikes["R"])
+                "L":     np.array(avg_neuron_rate["L"]) / np.max(avg_neuron_rate["L"]),
+                "R":     np.array(avg_neuron_rate["R"]) / np.max(avg_neuron_rate["R"]),
+                "L_pop": np.array(tot_spikes["L"])      / np.max(tot_spikes["L"]),
+                "R_pop": np.array(tot_spikes["R"])      / np.max(tot_spikes["R"]),
             }
             plotted_err = None
             ylabel_text = "Diff Avg-Pop"
@@ -1994,122 +2220,640 @@ def draw_rate_vs_angle(
         if show_hist:
             v = ax.twinx()
             v.grid(False)
+
             distr = {
-                side: [firing_neurons_distribution(angle_to_rate[a][side][pop_name])
-                       for a in angles]
+                side: [
+                    firing_neurons_distribution(
+                        angle_to_rate[a][side][pop_name]
+                    )
+                    for a in angles
+                ]
                 for side in sides_local
             }
+
             senders_renamed = {
-                side: [shift_senders(angle_to_rate[a][side][pop_name], hist_logscale)
-                       for a in angles]
+                side: [
+                    shift_senders(
+                        angle_to_rate[a][side][pop_name], hist_logscale
+                    )
+                    for a in angles
+                ]
                 for side in sides_local
             }
+
             max_spikes_single = max(flatten(distr.values()))
+
             draw_hist(
-                v, senders_renamed, angles,
-                num_neurons=len(angle_to_rate[angles[0]]["L"][pop_name]["global_ids"]),
+                v,
+                senders_renamed,
+                angles,
+                num_neurons=len(
+                    angle_to_rate[angles[0]]["L"][pop_name]["global_ids"]
+                ),
                 max_spikes_single_neuron=max_spikes_single,
-                logscale=hist_logscale
+                logscale=hist_logscale,
             )
 
-        # Plot lines (diff/max_norm unchanged)
-        if rate in ['diff', 'max_norm']:
+        # Plot
+        if rate in ["diff", "max_norm"]:
             for key, clr, lbl in [
-                ("L", "m", "Avg_L"),
+                ("L",     "m",           "Avg_L"),
                 ("L_pop", "darkmagenta", "Pop_L"),
-                ("R", "g", "Avg_R"),
-                ("R_pop", "darkgreen", "Pop_R"),
+                ("R",     "g",           "Avg_R"),
+                ("R_pop", "darkgreen",   "Pop_R"),
             ]:
                 if key in plotted_rate:
-                    ax.plot(angles, plotted_rate[key], 'o-', color=clr, label=lbl)
+                    ax.plot(angles, plotted_rate[key], "o-", color=clr, label=lbl)
             ax.legend()
 
         else:
             for side in sides_local:
                 mean_curve = plotted_rate[side]
-                err_curve = plotted_err[side]
 
-                if multi_mode:
+                ax.plot(
+                    angles,
+                    mean_curve,
+                    "o-",
+                    color=side_colors.get(side, "k"),
+                    label=label if label else side,
+                )
+
+                if multi_mode and plotted_err is not None:
+                    err_curve = plotted_err[side]
+
                     if shaded:
-                        ax.plot(
-                            angles, mean_curve, 'o-',
-                            color=side_colors.get(side, 'k'),
-                            label=label if label else side
-                        )
-
-                        # Add shaded band
-                        ci_label = f"±{error.upper()}"  # e.g. ±SEM, ±STD
                         ax.fill_between(
                             angles,
                             mean_curve - err_curve,
                             mean_curve + err_curve,
                             alpha=0.25,
-                            color=side_colors.get(side,'k'),
+                            color=side_colors.get(side, "k"),
                             linewidth=0,
-                            label=ci_label     # <<---------- NEW LABEL
+                            label=f"±{error.upper()}",
                         )
                     else:
                         ax.errorbar(
-                            angles, mean_curve, yerr=err_curve,
-                            fmt='o-', capsize=3,
-                            color=side_colors.get(side, 'k'),
-                            label=label if label else side
+                            angles,
+                            mean_curve,
+                            yerr=err_curve,
+                            fmt="none",
+                            capsize=3,
+                            color=side_colors.get(side, "k"),
                         )
-                else:
-                    ax.plot(
-                        angles, mean_curve, 'o-',
-                        color=side_colors.get(side, 'k'),
-                        label=label if label else side
-                    )
 
             if label is None:
                 ax.legend()
 
-        # Format
+        # Formatting
         ax.set_xticks(angles)
         ax.set_xticklabels([f"{a}°" for a in angles])
         ax.set_xlabel("Azimuth Angle")
         ax.set_ylabel(ylabel_text)
+
         if ylim:
             ax.set_ylim(ylim)
-        if multi_mode:
-            ax.set_title(f"{pop_name} ({len(multi_data)} subjects)")
-        else:
-            ax.set_title(pop_name)
 
-    # Case: single population
+        # Title with active filter info
+        base_title = (
+            f"{pop_name} ({len(multi_data)} subjects)" if multi_mode else pop_name
+        )
+        filter_parts = []
+        if time_interval is not None:
+            filter_parts.append(f"t=[{time_interval[0]},{time_interval[1]}] ms")
+        if cf_interval is not None:
+            filter_parts.append(f"CF=[{cf_interval[0]},{cf_interval[1]}] Hz")
+        ax.set_title(
+            base_title + ("  |  " + ", ".join(filter_parts) if filter_parts else "")
+        )
+
+    # ---- SINGLE POP ----
     if isinstance(pop, str) and pop != "all":
         fig, ax = plt.subplots(figsize=figsize)
         _draw_single_pop_subplot(ax, pop)
+
         if title:
             fig.suptitle(title)
+
         plt.tight_layout()
         plt.show()
         return ax
 
-    # Case: all populations
-    if pop == "all":
-        pops = ["SBC", "GBC", "LNTBC", "MNTBC", "MSO", "LSO"]
-    else:
-        pops = list(pop)
+    # ---- ALL POPS ----
+    pops = ["SBC", "GBC", "LNTBC", "MNTBC", "MSO", "LSO"] if pop == "all" else list(pop)
 
     n_rows = math.ceil(len(pops) / 3)
-    n_cols = 3
-
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(18, 4 * n_rows))
+    fig, axes = plt.subplots(n_rows, 3, figsize=(18, 4 * n_rows))
     axes = np.array(axes).flatten()
 
     for ax, p in zip(axes, pops):
         _draw_single_pop_subplot(ax, p)
 
-    # Disable unused axes
     for j in range(len(pops), len(axes)):
         axes[j].axis("off")
 
     if title:
         fig.suptitle(title)
+
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
 
     return axes
 
+def plot_single_neuron_psth(
+    spikes_file,
+    target_cf_hz=None,
+    xlim=None,
+    ylim = None,
+    bin_size=1.0,
+    hist_rate=True,
+    figsize=(10, 4),
+    n_neighbors=0,
+    color = 'b'
+):
+    """
+    Plot PSTH of one ANF neuron or a small CF neighborhood.
+
+    spikes_file: list-like, length = n_reps
+        Each element is a list (length = n_neurons) of spike-time lists (seconds).
+
+    n_neighbors:
+        Number of neighboring neurons on EACH side of the target CF.
+        0  -> single neuron
+        k  -> pool neurons [cf_idx-k : cf_idx+k]
+    """
+
+    # ------------------------------------------------------------
+    # Number of repetitions / neurons
+    # ------------------------------------------------------------
+    n_reps = len(spikes_file)
+    n_neurons = len(spikes_file[0])
+
+    # ------------------------------------------------------------
+    # Greenwood CF mapping
+
+    cf_array = greenwood_cf_array(CFMIN / Hz, CFMAX / Hz, n_neurons) 
+
+
+    _, cf_idx = take_closest(cf_array, target_cf_hz * Hz)
+
+    # ------------------------------------------------------------
+    # Select neuron indices
+    # ------------------------------------------------------------
+    idx_min = max(0, cf_idx - n_neighbors)
+    idx_max = min(n_neurons - 1, cf_idx + n_neighbors)
+    sel_indices = np.arange(idx_min, idx_max + 1)
+
+    print("Selected neurons:")
+    print(f"  Target CF      : {target_cf_hz:.1f} Hz")
+    print(f"  Center idx     : {cf_idx}")
+    print(f"  Index range    : [{idx_min}, {idx_max}]")
+    print(f"  CF range [Hz]  : {cf_array[idx_min]:.1f} – {cf_array[idx_max]:.1f}")
+    print(f"  # neurons used : {len(sel_indices)}")
+
+    # ------------------------------------------------------------
+    # Collect spikes across repetitions and neurons
+    # ------------------------------------------------------------
+    pooled_times_ms = []
+
+    for rep in spikes_file:
+        for idx in sel_indices:
+            if len(rep[idx]) > 0:
+                pooled_times_ms.append(np.asarray(rep[idx]) * 1000.0)
+
+    if len(pooled_times_ms) == 0:
+        raise RuntimeError("No spikes found for selected neurons.")
+
+    pooled_times_ms = np.concatenate(pooled_times_ms)
+
+    if xlim is None:
+        xlim = (0, pooled_times_ms.max())
+
+    # ------------------------------------------------------------
+    # PSTH
+    # ------------------------------------------------------------
+    bins = np.arange(xlim[0], xlim[1] + bin_size, bin_size)
+    counts, _ = np.histogram(pooled_times_ms, bins=bins)
+
+    if hist_rate:
+        # spikes / (bin * repetitions * neurons)
+        y = counts * 1000.0 / (bin_size * n_reps * len(sel_indices))
+        ylabel = "Firing rate [Hz]"
+    else:
+        y = counts
+        ylabel = "Spike count"
+
+    # ------------------------------------------------------------
+    # Plot
+    # ------------------------------------------------------------
+    plt.figure(figsize=figsize)
+    plt.plot(bins[:-1], y, lw=2, color = color)
+    plt.xlabel("Time [ms]")
+    plt.ylabel(ylabel)
+
+
+    if n_neighbors > 0:
+        title = (
+        f"PSTH (CF neighborhood)\n"
+        f"CF = {cf_array[cf_idx]:.0f} Hz"
+    )
+        title += f" ± {n_neighbors} neurons"
+    else:
+        title = (
+        f"Single-neuron PSTH\n"
+        f"CF = {cf_array[cf_idx]:.0f} Hz"
+    )
+    title += f" | {n_reps} repetitions"
+
+    plt.title(title)
+    plt.xlim(xlim)
+    plt.ylim(ylim)
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+    return
+
+def calculate_single_neuron_vector_strength(
+    spikes_file,
+    target_cf_hz,
+    n_neighbors=0,
+    n_bins=7,
+    x_ax="phase",          # "phase" or "time"
+    y_ax="percent",        # "percent" or "ashida"
+    center_at_peak=False,
+    figsize=(7, 5),
+    color="b",
+    ylim=None,
+    display=True
+):
+    """
+    Vector strength + phase/time histogram for a single neuron
+    across repeated simulations.
+
+    spikes_file : list, length = n_reps
+        Each element is a list (length = n_neurons) of spike-time lists (seconds)
+
+    target_cf_hz : float
+        CF of neuron of interest
+
+
+    n_neighbors : int
+        Pool neurons [cf_idx - n_neighbors : cf_idx + n_neighbors]
+    """
+
+
+    # ------------------------------------------------------------
+    # Dimensions
+    # ------------------------------------------------------------
+    n_reps = len(spikes_file)
+    n_neurons = len(spikes_file[0])
+
+    # ------------------------------------------------------------
+    # Greenwood CF mapping
+    # ------------------------------------------------------------
+    cf_array = greenwood_cf_array(CFMIN / Hz, CFMAX / Hz, n_neurons) / Hz
+    _, cf_idx = take_closest(cf_array, target_cf_hz)
+
+    idx_min = max(0, cf_idx - n_neighbors)
+    idx_max = min(n_neurons - 1, cf_idx + n_neighbors)
+    sel_indices = np.arange(idx_min, idx_max + 1)
+
+    # ------------------------------------------------------------
+    # Pool spikes across repetitions & neurons
+    # ------------------------------------------------------------
+    pooled_spike_times = []
+
+    for rep in spikes_file:
+        for idx in sel_indices:
+            if len(rep[idx]) > 0:
+                pooled_spike_times.append(np.asarray(rep[idx]))
+
+    if len(pooled_spike_times) == 0:
+        return 0 if not display else (0, None)
+
+    spike_times_array = np.concatenate(pooled_spike_times)
+    total_spikes = len(spike_times_array)
+
+    # ------------------------------------------------------------
+    # Vector strength (UNCHANGED logic)
+    # ------------------------------------------------------------
+    phases = get_spike_phases(spike_times_array, target_cf_hz)
+    vs = calculate_vector_strength(spike_times_array, target_cf_hz)
+
+    if not display:
+        return vs
+
+    # ------------------------------------------------------------
+    # Plot
+    # ------------------------------------------------------------
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+
+    # =========================
+    # PHASE AXIS
+    # =========================
+    if x_ax == "phase":
+
+        orig_bins = np.linspace(0, 2 * np.pi, n_bins + 1)
+        hist_raw, _ = np.histogram(phases, bins=orig_bins)
+        peak_bin_idx = np.argmax(hist_raw)
+
+        if center_at_peak:
+            bin_centers_orig = (orig_bins[:-1] + orig_bins[1:]) / 2
+            peak_center = bin_centers_orig[peak_bin_idx]
+            values = np.angle(np.exp(1j * (phases - peak_center)))
+            bins = np.linspace(-np.pi, np.pi, n_bins + 1)
+            bin_centers = (bins[:-1] + bins[1:]) / 2
+        else:
+            values = phases
+            bins = orig_bins
+            bin_centers = (bins[:-1] + bins[1:]) / 2
+
+        hist, _ = np.histogram(values, bins=bins)
+        bin_width = bins[1] - bins[0]
+
+        if y_ax == "percent":
+            y = hist / total_spikes * 100
+            ylabel = "Spikes / bin (% of total)"
+        elif y_ax == "ashida":
+            y = hist / (total_spikes * bin_width)
+            ylabel = "Probability density (rad$^{-1}$)"
+        else:
+            raise ValueError("y_ax must be 'percent' or 'ashida'")
+
+        ax.bar(bin_centers, y, width=bin_width, alpha=0.7, color=color)
+        ax.set_xlabel("Phase (cycles)")
+        ax.set_xticks(
+            np.array([0, 0.5, 1, 1.5, 2]) * np.pi if not center_at_peak
+            else np.array([-1, -0.5, 0, 0.5, 1]) * np.pi
+        )
+        ax.set_xticklabels(
+            ['0', '', '0.5', '', '1'] if not center_at_peak
+            else ['-0.5', '', '0', '', '0.5']
+        )
+
+    # =========================
+    # TIME AXIS
+    # =========================
+    elif x_ax == "time":
+
+        period_ms = 1000 / target_cf_hz
+        time_values = (phases / (2 * np.pi)) * period_ms
+
+        orig_bins = np.linspace(0, period_ms, n_bins + 1)
+        hist_raw, _ = np.histogram(time_values, bins=orig_bins)
+        peak_bin_idx = np.argmax(hist_raw)
+
+        if center_at_peak:
+            bin_centers_orig = (orig_bins[:-1] + orig_bins[1:]) / 2
+            peak_center = bin_centers_orig[peak_bin_idx]
+            values = np.mod(
+                time_values - peak_center + period_ms / 2,
+                period_ms
+            ) - period_ms / 2
+            bins = np.linspace(-period_ms / 2, period_ms / 2, n_bins + 1)
+            bin_centers = (bins[:-1] + bins[1:]) / 2
+        else:
+            values = time_values
+            bins = orig_bins
+            bin_centers = (bins[:-1] + bins[1:]) / 2
+
+        hist, _ = np.histogram(values, bins=bins)
+        bin_width = bins[1] - bins[0]
+
+        if y_ax == "percent":
+            y = hist / total_spikes * 100
+            ylabel = "Spikes / bin (% of total)"
+        elif y_ax == "ashida":
+            y = hist / (total_spikes * bin_width)
+            ylabel = "Probability density (ms$^{-1}$)"
+        else:
+            raise ValueError("y_ax must be 'percent' or 'ashida'")
+
+        ax.bar(bin_centers, y, width=bin_width, alpha=0.7, color=color)
+        ax.set_xlabel("Time [ms]")
+
+    ax.set_ylabel(ylabel)
+
+    if ylim is not None:
+        ax.set_ylim(ylim)
+
+    ax.set_title(
+        f"Single-neuron VS = {vs:.3f}\n"
+        f"CF = {cf_array[cf_idx]:.0f} Hz | "
+        f"{n_reps} reps | "
+        f"{len(sel_indices)} neuron(s)"
+    )
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    plt.tight_layout()
+    plt.show()
+
+    return vs, fig
+
+def draw_mm_norm_multi_dataset(
+    data_list,
+    pop="LSO",
+    sides=None,
+    cf_interval=None,
+    colors=None,
+    labels=None,
+    figsize=(7, 4),
+    title=None,
+    ylim=None,
+):
+    """
+    Plot multiple datasets simultaneously (same population),
+    all min–max normalized.
+
+    - data_list: list of dataset dicts
+    - NO SEM / STD
+    - NO histogram
+    - Pure comparison plot
+    """
+
+    if not isinstance(data_list, list) or len(data_list) < 2:
+        raise ValueError("data_list must be a list with at least two datasets")
+
+    sides_local = ["L", "R"] if sides is None else sides
+
+    if colors is None:
+        colors = plt.cm.tab10.colors
+    if labels is None:
+        labels = [f"Dataset {i+1}" for i in range(len(data_list))]
+
+    def _extract_mm_norm(data):
+        angle_to_rate = data["angle_to_rate"]
+        angles = list(angle_to_rate.keys())
+
+        duration = (
+            data.get(
+                "simulation_time",
+                data["sounds"]["base_sound"].sound.duration / b2.ms,
+            )
+            * b2.ms
+        )
+
+        tot, avg, _ = calculate_firing_rates(
+            angle_to_rate,
+            pop,
+            sides_local,
+            angles,
+            duration,
+            cf_interval,
+        )
+
+        mm_norm = {}
+        for side in sides_local:
+            r = np.asarray(avg[side])
+            mm_norm[side] = (r - r.min()) / (r.max() - r.min())
+
+        return angles, mm_norm
+
+    # --- extract & check angle consistency ---
+    all_angles = []
+    all_norm = []
+
+    for data in data_list:
+        angles, norm = _extract_mm_norm(data)
+        all_angles.append(angles)
+        all_norm.append(norm)
+
+    for a in all_angles[1:]:
+        if a != all_angles[0]:
+            raise ValueError("All datasets must share the same angle grid")
+
+    angles = all_angles[0]
+
+    # --- plot ---
+    fig, ax = plt.subplots(figsize=figsize)
+
+    for i, norm in enumerate(all_norm):
+        for side in sides_local:
+            ax.plot(
+                angles,
+                norm[side],
+                marker="o",
+                linestyle="-",
+                color=colors[i % len(colors)],
+                alpha=0.85,
+                label=f"{labels[i]} – {side}",
+            )
+
+    ax.set_xticks(angles)
+    ax.set_xticklabels([f"{a}°" for a in angles])
+    ax.set_xlabel("Azimuth Angle")
+    ax.set_ylabel("Min–Max Normalized Rate")
+
+    if ylim:
+        ax.set_ylim(ylim)
+
+    ax.set_title(title if title else f"{pop} – Min–Max Normalized Comparison")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()
+
+    return ax
+
+def draw_multi_dataset_raw_rates(
+    data_list,
+    pop="LSO",
+    sides=None,
+    cf_interval=None,
+    colors=None,
+    labels=None,
+    figsize=(7, 4),
+    title=None,
+    ylim=None,
+):
+    """
+    Plot multiple datasets simultaneously (same population),
+    using raw average firing rates.
+
+    - data_list: list of dataset dicts
+    - NO normalization
+    - NO SEM / STD
+    - NO histogram
+    - Pure comparison plot
+    """
+
+    if not isinstance(data_list, list) or len(data_list) < 2:
+        raise ValueError("data_list must be a list with at least two datasets")
+
+    sides_local = ["L", "R"] if sides is None else sides
+
+    if colors is None:
+        colors = plt.cm.tab10.colors
+    if labels is None:
+        labels = [f"Dataset {i+1}" for i in range(len(data_list))]
+
+    def _extract_rates(data):
+        angle_to_rate = data["angle_to_rate"]
+        angles = list(angle_to_rate.keys())
+
+        duration = (
+            data.get(
+                "simulation_time",
+                data["sounds"]["base_sound"].sound.duration / b2.ms,
+            )
+            * b2.ms
+        )
+
+        _, avg, _ = calculate_firing_rates(
+            angle_to_rate,
+            pop,
+            sides_local,
+            angles,
+            duration,
+            cf_interval,
+        )
+
+        return angles, avg
+
+    # --- extract & consistency check ---
+    all_angles = []
+    all_avg = []
+
+    for data in data_list:
+        angles, avg = _extract_rates(data)
+        all_angles.append(angles)
+        all_avg.append(avg)
+
+    for a in all_angles[1:]:
+        if a != all_angles[0]:
+            raise ValueError("All datasets must share the same angle grid")
+
+    angles = all_angles[0]
+
+    # --- plot ---
+    fig, ax = plt.subplots(figsize=figsize)
+
+    for i, avg in enumerate(all_avg):
+        for side in sides_local:
+            ax.plot(
+                angles,
+                avg[side],
+                marker="o",
+                linestyle="-",
+                color=colors[i % len(colors)],
+                alpha=0.85,
+                label=f"{labels[i]} – {side}",
+            )
+
+    ax.set_xticks(angles)
+    ax.set_xticklabels([f"{a}°" for a in angles])
+    ax.set_xlabel("Azimuth Angle")
+    ax.set_ylabel("Avg Firing Rate [Hz]")
+
+    if ylim:
+        ax.set_ylim(ylim)
+
+    ax.set_title(title if title else f"{pop} – Raw Rate Comparison")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()
+
+    return ax
