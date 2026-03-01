@@ -144,7 +144,7 @@ def sound_to_spikes(sound, angle, params, plot_spikes=False) -> AnfResponse:
 def run_repeated_sound_psth(
     sound,
     n_reps: int = 10,
-    save_name: str = "anf_297Hz_repeated.dill",
+    save_name: str = "anf_297Hz_repeated.pic",
     params = None
 ):
     """
@@ -166,50 +166,6 @@ def run_repeated_sound_psth(
         data = np.asarray(sound_n)[:, 0]
         fs = float(sound_n.samplerate / Hz)
         cf = (CFMIN/Hz, CFMAX/Hz, NUM_CF)
-
-        anf = cochlea.run_zilany2014(
-            data,
-            fs,
-            cf=cf,
-            seed=rep,  # vary seed across repetitions
-            **coch_par
-        )
-        all_spikes.append(anf.spikes)
-
-    # ------------------------------------------------------------------
-    # Save spikes
-    # ------------------------------------------------------------------
-    save_path = Path(Paths.RESULTS_DIR) / save_name
-    with open(save_path, "wb") as f:
-        dill.dump(all_spikes, f)
-
-    logger.info(f"[run_repeated_tone_psth] Saved spikes to {save_path}")
-
-def run_repeated_sound_psth_single(
-    sound,
-    cf,
-    n_reps: int = 10,
-    save_name: str = "anf_297Hz_repeated.dill",
-    params = None
-):
-    """
-    Run repeated tone bursts through the Zilany ANF model,
-    save spike times with dill, reload them, and plot a PSTH
-    (Fig. 2B-style).
-
-    Single CF, single ear, onset-aligned.
-    """
-
-
-    all_spikes = []
-    coch_par = params.get("cochlea_params", {})
-
-
-    for rep in tqdm(range(n_reps), desc="Running repetitions"):
-
-        sound_n = resample_sound(sound.sound, original_fs=float(sound.sound.samplerate / Hz), target_fs=100000)
-        data = np.asarray(sound_n)[:, 0]
-        fs = float(sound_n.samplerate / Hz)
 
         anf = cochlea.run_zilany2014(
             data,
