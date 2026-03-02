@@ -63,9 +63,11 @@ if __name__ == "__main__":
     LEVEL = 60
 
     inputs = [
-        Tone(0.5 * b2.kHz, duration=TIME_ON * b2.ms, level=LEVEL * b2h.dB, ramp_ms=10, offset_silence_duration= TIME_OFF * b2.ms)
-    #     Tone(1.2 * b2.kHz, duration=TIME_SIMULATION * b2.ms, level=LEVEL * b2h.dB, ramp_ms=10, offset_silence_duration=0 * b2.ms),
-    #     Tone(4 * b2.kHz, duration=TIME_SIMULATION * b2.ms, level=LEVEL * b2h.dB, ramp_ms=10, offset_silence_duration=0 * b2.ms),
+        #Tone(0.5 * b2.kHz, duration=TIME_ON * b2.ms, level=LEVEL * b2h.dB, ramp_ms=10, offset_silence_duration= TIME_OFF * b2.ms),
+        Tone(1.2 * b2.kHz, duration=TIME_ON * b2.ms, level=LEVEL * b2h.dB, ramp_ms=10, offset_silence_duration= TIME_OFF * b2.ms),
+        Tone(16 * b2.kHz, duration=TIME_ON * b2.ms, level=LEVEL * b2h.dB, ramp_ms=10, offset_silence_duration= TIME_OFF * b2.ms),
+        Click(duration=TIME_SIMULATION * b2.ms, click_duration=0.5*b2.ms, level=LEVEL * b2h.dB)
+    # #     Tone(4 * b2.kHz, duration=TIME_SIMULATION * b2.ms, level=LEVEL * b2h.dB, ramp_ms=10, offset_silence_duration=0 * b2.ms),
     #     Tone(16 * b2.kHz, duration=TIME_SIMULATION * b2.ms, level=LEVEL * b2h.dB, ramp_ms=10, offset_silence_duration=0 * b2.ms),
     #     WhiteNoise(duration=TIME_SIMULATION * b2.ms, level=LEVEL * b2h.dB, ramp_ms=10, offset_silence_duration=0 * b2.ms),
     #     Click(duration=TIME_SIMULATION * b2.ms, click_duration=1, level=LEVEL * b2h.dB)
@@ -76,10 +78,11 @@ if __name__ == "__main__":
 
     ps = []
 
-    for s in range(1):
-        print(s)
-        p = params(f"subject_{s}")
-        p.cochlea[cochlea_key]['hrtf_params']['subj_number'] = s
+    for d in [1,1.25,1.5,1.75]:
+        p = params(f"MNTBCs2LSO_delay_{d}ms")
+        p.SYN_DELAYS.MNTBCs2LSO = d
+        p.SYN_DELAYS.MNTBCs2MSO = d
+        p.SYN_WEIGHTS.LNTBCs2MSO = 0
         ps.append(p)
 
     num_runs = len(inputs) * len(ps)

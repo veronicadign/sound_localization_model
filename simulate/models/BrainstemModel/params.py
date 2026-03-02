@@ -93,7 +93,7 @@ class Parameters:
         SBCs2LSO: float = 1.0 #5       
         MNTBCs2LSO: float = -10.0 
         #
-        SBCs2MSO: float = 20.0
+        SBCs2MSO: float = 12.0
         MNTBCs2MSO: float = -10.0 #-20.0
         LNTBCs2MSO: float = -10.0 #-20.0
         #
@@ -112,8 +112,8 @@ class Parameters:
         #
         SBCs2MSOipsi: float = 2.0
         SBCs2MSOcontra: float = 2.0
-        LNTBCs2MSOipsi: float = 1.0 
-        MNTBCs2MSOcontra: float = 1.0
+        LNTBCs2MSO: float = 1.0 
+        MNTBCs2MSO: float = 1.0
         #
         MNTBCs2SPN: float = 1.0 #0.11 integration time at MNTB/LNTB
 
