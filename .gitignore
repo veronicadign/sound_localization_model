@@ -8,6 +8,7 @@ IHF_SPIKES
 .claude
 ANF_SPIKETRAINS
 results/*
+RESULTS/
 **/*.pic
 myoga_cache
 data/**/**
@@ -17,3 +18,4 @@ secrets
 results
 .DS_Store
 simulate/jobs/*
+run_commands.txt
