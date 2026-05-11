@@ -1,0 +1,64 @@
+// MSO multicompartment morphology — active conductances (Klt + Ih)
+// Same morphology as mso_model.hoc; adds Kv1 and HCN channels.
+// Channel kinetics: Rothman & Manis 2003, J Neurophysiol 89:3070-3087.
+//
+// Conductance distribution (soma-dominant, MSO literature):
+//   soma:      gbar_klt = 0.020 S/cm2,  gbar_ih = 0.002 S/cm2
+//   dendrites: gbar_klt = 0.005 S/cm2,  gbar_ih = 0.001 S/cm2
+//
+// Passive params unchanged from mso_model.hoc.
+
+create soma, dend_medial, dend_lateral
+
+access soma
+
+soma {
+    nseg = 1
+    Ra   = 150
+    cm   = 1.537
+    insert pas
+    g_pas = 1.537e-3
+    e_pas = -57.0
+    insert klt
+    gbar_klt = 0.020
+    insert ih
+    gbar_ih = 0.002
+    ek = -77.0
+    pt3dadd(0, 0, -10, 20)
+    pt3dadd(0, 0, 10, 20)
+}
+
+dend_medial {
+    nseg = 11
+    Ra   = 150
+    cm   = 1.537
+    insert pas
+    g_pas = 1.537e-3
+    e_pas = -57.0
+    insert klt
+    gbar_klt = 0.005
+    insert ih
+    gbar_ih = 0.001
+    ek = -77.0
+    pt3dadd(0, 0, 10, 3.5)
+    pt3dadd(0, 0, 160, 3.5)
+}
+
+dend_lateral {
+    nseg = 11
+    Ra   = 150
+    cm   = 1.537
+    insert pas
+    g_pas = 1.537e-3
+    e_pas = -57.0
+    insert klt
+    gbar_klt = 0.005
+    insert ih
+    gbar_ih = 0.001
+    ek = -77.0
+    pt3dadd(0, 0, -10, 3.5)
+    pt3dadd(0, 0, -160, 3.5)
+}
+
+connect dend_medial(0), soma(1)
+connect dend_lateral(0), soma(0)

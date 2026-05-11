@@ -1,4 +1,4 @@
-// MSO multicompartment morphology for LFPy.Cell (plain HOC, no template)
+// MSO multicompartment morphology for LFPy.Cell
 // Bipolar neuron: soma + dend_medial (positive z) + dend_lateral (negative z)
 //
 // Passive params derived from point-neuron equivalents:
@@ -13,11 +13,6 @@ create soma, dend_medial, dend_lateral
 
 access soma
 
-// Explicit 3D coordinates (required by LFPy for compartment geometry):
-//   soma:         z in [-10, +10]  (centred at origin)
-//   dend_medial:  z in [+10, +160] (extends in +z; connects to soma(1) at z=+10)
-//   dend_lateral: z in [-10, -160] (extends in -z; connects to soma(0) at z=-10)
-
 soma {
     nseg = 1
     Ra   = 150
@@ -26,7 +21,7 @@ soma {
     g_pas = 1.537e-3
     e_pas = -57.0
     pt3dadd(0, 0, -10, 20)
-    pt3dadd(0, 0,  10, 20)
+    pt3dadd(0, 0, 10, 20)
 }
 
 dend_medial {
@@ -36,7 +31,7 @@ dend_medial {
     insert pas
     g_pas = 1.537e-3
     e_pas = -57.0
-    pt3dadd(0, 0,  10, 3.5)
+    pt3dadd(0, 0, 10, 3.5)
     pt3dadd(0, 0, 160, 3.5)
 }
 
@@ -47,7 +42,7 @@ dend_lateral {
     insert pas
     g_pas = 1.537e-3
     e_pas = -57.0
-    pt3dadd(0, 0,  -10, 3.5)
+    pt3dadd(0, 0, -10, 3.5)
     pt3dadd(0, 0, -160, 3.5)
 }
 

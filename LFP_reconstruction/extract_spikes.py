@@ -52,8 +52,8 @@ def extract_and_save(pic_file, angle, side, spikes_dir):
     write GDF files and metadata.json to spikes_dir.
 
     Extracts 4 populations:
-      SBC_{side}        — ipsilateral SBC (medial dendrite input)
-      SBC_{contra_side} — contralateral SBC (lateral dendrite input)
+      SBC_{contra_side} — contralateral SBC (medial dendrite input)
+      SBC_{side}        — ipsilateral SBC   (lateral dendrite input)
       MNTBC_{side}      — ipsilateral MNTBC (soma inhibition)
       LNTBC_{side}      — ipsilateral LNTBC (soma inhibition)
 
@@ -70,7 +70,13 @@ def extract_and_save(pic_file, angle, side, spikes_dir):
 
     data_ipsi   = result['angle_to_rate'][angle][side]
     data_contra = result['angle_to_rate'][angle][contra_side]
-    metadata    = {}
+
+    try:
+        stim_freq_hz = float(result['sounds']['base_sound'].frequency)
+    except Exception:
+        stim_freq_hz = None
+
+    metadata = {'stim_freq_hz': stim_freq_hz}
 
     # Ipsilateral SBC + inhibitory pops
     for pop in POPS:

@@ -18,4 +18,6 @@ secrets
 results
 .DS_Store
 simulate/jobs/*
-run_commands.txt
+LFP_reconstruction/run_commands.txt
+LFP_reconstruction/report_lfp_reconstruction.tex
+x86_64
