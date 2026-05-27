@@ -2,9 +2,10 @@
 // Same morphology as mso_model.hoc; adds Kv1 and HCN channels.
 // Channel kinetics: Rothman & Manis 2003, J Neurophysiol 89:3070-3087.
 //
-// Conductance distribution (soma-dominant, MSO literature):
-//   soma:      gbar_klt = 0.020 S/cm2,  gbar_ih = 0.002 S/cm2
-//   dendrites: gbar_klt = 0.005 S/cm2,  gbar_ih = 0.001 S/cm2
+// Conductance distribution (Klt/Ih from MSO literature):
+//   soma:      gbar_klt = 0.017 S/cm2 (17 mS/cm2),  gbar_ih = 0.00086 S/cm2 (0.86 mS/cm2)
+//   dendrites: gbar_klt = 0.0036 S/cm2 (3.6 mS/cm2), gbar_ih = 0.00018 S/cm2 (0.18 mS/cm2)
+//   Ih modeled as dynamic HCN (eh=-43 mV); Klt is voltage-gated (must not be frozen).
 //
 // Passive params unchanged from mso_model.hoc.
 
@@ -20,9 +21,9 @@ soma {
     g_pas = 1.537e-3
     e_pas = -57.0
     insert klt
-    gbar_klt = 0.020
+    gbar_klt = 0.017
     insert ih
-    gbar_ih = 0.002
+    gbar_ih = 0.00086
     ek = -77.0
     pt3dadd(0, 0, -10, 20)
     pt3dadd(0, 0, 10, 20)
@@ -36,9 +37,9 @@ dend_medial {
     g_pas = 1.537e-3
     e_pas = -57.0
     insert klt
-    gbar_klt = 0.005
+    gbar_klt = 0.0036
     insert ih
-    gbar_ih = 0.001
+    gbar_ih = 0.00018
     ek = -77.0
     pt3dadd(0, 0, 10, 3.5)
     pt3dadd(0, 0, 160, 3.5)
@@ -52,9 +53,9 @@ dend_lateral {
     g_pas = 1.537e-3
     e_pas = -57.0
     insert klt
-    gbar_klt = 0.005
+    gbar_klt = 0.0036
     insert ih
-    gbar_ih = 0.001
+    gbar_ih = 0.00018
     ek = -77.0
     pt3dadd(0, 0, -10, 3.5)
     pt3dadd(0, 0, -160, 3.5)

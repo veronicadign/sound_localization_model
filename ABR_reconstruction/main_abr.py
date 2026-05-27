@@ -188,7 +188,7 @@ def _run_one_side(side, args, meta):
     elif side_cond == 'ipsilateral':
         k_yxl_local[0] = [0, 0, 0, 0]   # silence medial dend (contra SBC off)
         k_yxl_local[2] = [0, 0, 0, 1]   # silence MNTBC (contra inhibition off)
-    j_yx_local    = [0.012, 0.012, 0.010, 0.010]
+    j_yx_local    = [0.055, 0.055, 0.025, 0.025]
     tau_yx_local  = [0.2,   0.2,   0.4,   0.4  ]
     syn_delay_loc = [2.0,   2.0,   1.0,   1.0  ]
 

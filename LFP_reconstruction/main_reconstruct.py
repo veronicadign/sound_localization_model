@@ -49,17 +49,23 @@ META_FILE  = os.path.join(SPIKES_DIR, 'metadata.json')
 # ---------------------------------------------------------------------------
 DT           = 0.026   # ms #0.0625
 TSTOP        = 50.0     # ms
-V_INIT       = -57.0    # mV  (E_L.MSO)
-N_CELLS           = 3000    # default representative cell count
+V_INIT       = -57.0    # mV  (E_L.MSO) -57
+N_CELLS           = 15500    # default representative cell count
 N_MSO_TOTAL       = 15500   # MSO neurons per side in NEST sim (params.py POP_NUM.MSO)
 MSO_DENSITY_MM3   = 13049.0 # human MSO packing density (neurons/mm³)
+
+# ---------------------------------------------------------------------------
+# MSO elliptic cylinder geometry
+# ---------------------------------------------------------------------------
+ELLIPSE_RADIUS_X = 443.0    # μm  rostrocaudal half-axis #265
+ELLIPSE_RADIUS_Y = 2845.0   # μm  dorsoventral half-axis
 
 # ---------------------------------------------------------------------------
 # Probe geometry  (module-level for convergence_test.py)
 # ---------------------------------------------------------------------------
 N_CH    = 16
 PROBE_Z = np.linspace(-400, 400, N_CH)   # μm
-PROBE_X = np.zeros(N_CH)
+PROBE_X = np.zeros(N_CH)   # lower-freq zone (60% toward low-freq end)
 PROBE_Y = np.zeros(N_CH)
 SIGMA   = 0.3                            # S/m
 
@@ -76,7 +82,7 @@ K_YXL = [
     [1, 0, 0],
     [0, 2, 1],
 ]
-SYN_DELAY_LOC   = [2.0, 1.0, 1.0]
+SYN_DELAY_LOC   = [2.0, 1.0, 1.0] #[2.0, 1.65, 1.65]
 SYN_DELAY_SCALE = [None, None, None]
 
 
@@ -92,19 +98,19 @@ class MSOPopulation(Population):
             'tau1':    0.15,    # ms  (TAUS_EX_RISE.MSO)
             'tau2':    0.3,     #0.3 ms  (TAUS_EX_DECAY.MSO) try 0.2
             'e':       0.0,     # mV  excitatory reversal
-            'weight':  0.012,   # μS = 12 nS
+            'weight':  0.055,   # 0.012 μS = 12 nS
         },
         'MNTBC': {
             'syntype': 'Exp2Syn',
-            'tau1':    0.15,
-            'tau2':    0.7,     #0.7 ms  (TAUS_IN_DECAY.MSO) try 0.4
+            'tau1':    0.15,    #0.15 ms  (TAUS_IN_RISE.MSO) try 0.4
+            'tau2':    0.7,     #0.7 ms  (TAUS_IN_DECAY.MSO) try 2
             'e':      -75.0,    # mV  inhibitory reversal
-            'weight':  0.010,   # μS = 10 nS 0.010
+            'weight':  0.025,   # μS = 10 nS 0.010
         },
         'LNTBC': {
             'syntype': 'Exp2Syn',
             'tau1':    0.15,
-            'tau2':    0.4,
+            'tau2':    0.7,     #0.7 ms  (TAUS_IN_DECAY.MSO) try 0.4
             'e':      -75.0,
             'weight':  0.000,
         },
@@ -153,24 +159,72 @@ class MSOPopulation(Population):
 
     def insert_all_synapses(self, cellindex, cell):
         for X in self.X:
+            pop_type = X.rsplit('_', 1)[0]
             for j in range(len(self.synIdx[cellindex][X])):
+                idx = self.synIdx[cellindex][X][j]
                 synDelays = (self.synDelays[cellindex][X][j]
                              if self.synDelays is not None else None)
+
+                if pop_type == 'SBC' and len(idx) > 0:
+                    z_lo = min(self.layerBoundaries[j])
+                    z_hi = max(self.layerBoundaries[j])
+                    z_mid_all = cell.z.mean(axis=1)
+                    layer_segs = np.where((z_mid_all >= z_lo) &
+                                          (z_mid_all <= z_hi))[0]
+                    soma_segs = cell.get_idx('soma')
+                    soma_mid = np.array([cell.x[soma_segs].mean(),
+                                         cell.y[soma_segs].mean(),
+                                         cell.z[soma_segs].mean()])
+                    seg_mids = np.column_stack([cell.x[layer_segs].mean(axis=1),
+                                                cell.y[layer_segs].mean(axis=1),
+                                                cell.z[layer_segs].mean(axis=1)])
+                    dist = np.linalg.norm(seg_mids - soma_mid, axis=1)
+                    total = dist.sum()
+                    weights = dist / total if total > 0 else np.ones(len(dist)) / len(dist)
+                    idx = np.random.choice(layer_segs, size=len(idx),
+                                           p=weights, replace=True).astype('int32')
+
                 self.insert_synapses(
                     cell=cell,
                     cellindex=cellindex,
-                    synParams=self.PER_POP_SYN[X.rsplit('_', 1)[0]].copy(),
-                    idx=self.synIdx[cellindex][X][j],
+                    synParams=self.PER_POP_SYN[pop_type].copy(),
+                    idx=idx,
                     X=X,
                     SpCell=self.SpCells[cellindex][X][j],
                     synDelays=synDelays,
                 )
 
-    def draw_rand_pos(self, **kwargs):
-        soma_pos = super().draw_rand_pos(**kwargs)
-        # Cell index = tonotopic rank → cell 0 (lowest CF) at x_min, cell n-1 (highest CF) at x_max.
-        # (Fischl et al. 2016: "tonotopy along rostrocaudal axis" -> axis perpendicular to probe/z).
-        soma_pos.sort(key=lambda p: p['x']) # sort by x coordinate in the cylinder
+    def draw_rand_pos(self, radius_x=ELLIPSE_RADIUS_X, radius_y=ELLIPSE_RADIUS_Y,
+                      z_min=0.0, z_max=0.0, min_cell_interdist=1.0, **kwargs):
+        """Uniform sampling inside an elliptic cylinder (x/rx)²+(y/ry)²≤1."""
+        N = self.POPULATION_SIZE
+        x = (np.random.rand(N) - 0.5) * 2 * radius_x
+        y = (np.random.rand(N) - 0.5) * 2 * radius_y
+        z = np.random.rand(N) * (z_max - z_min) + z_min
+
+        outside = np.where((x / radius_x)**2 + (y / radius_y)**2 > 1)[0]
+        while len(outside):
+            x[outside] = (np.random.rand(len(outside)) - 0.5) * 2 * radius_x
+            y[outside] = (np.random.rand(len(outside)) - 0.5) * 2 * radius_y
+            z[outside] = np.random.rand(len(outside)) * (z_max - z_min) + z_min
+            outside = np.where((x / radius_x)**2 + (y / radius_y)**2 > 1)[0]
+
+        too_close = np.where(self.calc_min_cell_interdist(x, y, z) < min_cell_interdist)[0]
+        while len(too_close):
+            x[too_close] = (np.random.rand(len(too_close)) - 0.5) * 2 * radius_x
+            y[too_close] = (np.random.rand(len(too_close)) - 0.5) * 2 * radius_y
+            z[too_close] = np.random.rand(len(too_close)) * (z_max - z_min) + z_min
+            outside = np.where((x / radius_x)**2 + (y / radius_y)**2 > 1)[0]
+            while len(outside):
+                x[outside] = (np.random.rand(len(outside)) - 0.5) * 2 * radius_x
+                y[outside] = (np.random.rand(len(outside)) - 0.5) * 2 * radius_y
+                z[outside] = np.random.rand(len(outside)) * (z_max - z_min) + z_min
+                outside = np.where((x / radius_x)**2 + (y / radius_y)**2 > 1)[0]
+            too_close = np.where(self.calc_min_cell_interdist(x, y, z) < min_cell_interdist)[0]
+
+        # Tonotopy: sort by x (rostrocaudal axis, Fischl et al. 2016)
+        soma_pos = [{'x': x[i], 'y': y[i], 'z': z[i]} for i in range(N)]
+        soma_pos.sort(key=lambda p: p['x'])
         return soma_pos
 
 
@@ -218,8 +272,8 @@ def main():
     X_pops = [f'SBC_{contra_side}', f'SBC_{side}',
               f'MNTBC_{side}', f'LNTBC_{side}']
     k_yxl_local = [
-        [3, 0, 0, 0],   # medial dendrite:  1×SBC_contra
-        [0, 3, 0, 0],   # lateral dendrite: 2×SBC_ipsi
+        [3, 0, 0, 0],   # medial dendrite:  3×SBC_contra
+        [0, 3, 0, 0],   # lateral dendrite: 3×SBC_ipsi
         [0, 0, 2, 1],   # soma:             2×MNTBC + 1×LNTBC
     ]
     if args.monaural:
@@ -259,7 +313,7 @@ def main():
     # Cylinder sized to match human MSO packing density (13049 neurons/mm³).
     # Aspect ratio h = 2r (isotropic): V = 2π r³ → r = (V/2π)^(1/3).
     _V_um3 = (args.n_cells / MSO_DENSITY_MM3) * 1e9
-    _r_um  = (_V_um3 / (2 * np.pi)) ** (1 / 3)
+    #_r_um  = (_V_um3 / (2 * np.pi)) ** (1 / 3)
     pop = MSOPopulation(
         n_syn_per_pop=n_syn_per_pop,
         y=pop_label,
@@ -270,9 +324,11 @@ def main():
         rand_rot_axis=['z'],
         simulationParams={'rec_imem': True},
         populationParams={
-            'number': args.n_cells,
-            'radius': 61.5,  # μm  (OR _r_um for density-based sizing)
-            'z_min': -50.0, 'z_max': 50.0, 'min_cell_interdist': 1.5,
+            'number':   args.n_cells,
+            'radius':   ELLIPSE_RADIUS_Y,   # bounding value required by parent __init__
+            'radius_x': ELLIPSE_RADIUS_X,
+            'radius_y': ELLIPSE_RADIUS_Y,
+            'z_min': 0.0, 'z_max': 0.0, 'min_cell_interdist': 1.0,
             'min_r': np.array([[0.], [0.]]),
         },
         layerBoundaries=LAYER_BOUNDARIES,
@@ -330,7 +386,7 @@ def main():
         _plot_phase_cycle(output_dir, meta.get('stim_freq_hz'), PROBE_Z,
                           side, args.angle, args.n_cells)
         _plot_single_cells(output_dir, single_contribs, tvec,
-                           PROBE_Z, soma_pos, PROBE_X, PROBE_Y, 
+                           PROBE_Z, soma_pos, PROBE_X, PROBE_Y,
                            cell_gids=cell_indices, total_sim_cells=args.n_cells)
 
 
@@ -530,12 +586,11 @@ def _plot_single_cells(output_dir, single_contribs, tvec, probe_z,
         ax_map = fig.add_subplot(gs[i, 0])
         vmax = np.abs(single_contribs[i]).max() or 1e-9
         ax_map.imshow(single_contribs[i], aspect='auto', origin='lower',
-                      extent=[tvec[0], tvec[-1], probe_z[0], probe_z[-1]],
-                      cmap='RdBu_r', vmin=-vmax, vmax=vmax)
+                        extent=[tvec[0], tvec[-1], probe_z[0], probe_z[-1]],
+                        cmap='RdBu_r', vmin=-vmax, vmax=vmax)
         ax_map.set_ylabel('z (μm)')
         ax_map.set_title(
             f'Sim ID {gid} | soma ({sx:.0f}, {sy:.0f}, {sz:.0f}) μm | d_min = {d_min:.0f} μm'
-            # we can also add (Bio ID {mso_idx})
         )
         if i == n_cells - 1:
             ax_map.set_xlabel('Time (ms)')
