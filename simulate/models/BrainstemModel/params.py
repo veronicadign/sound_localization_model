@@ -34,7 +34,11 @@ class Parameters:
                 "Zilany": {
                     "hrtf_params": {
                         "subj_number": 0,
-                        "itd_remove_strategy": ITD_REMOVAL_STRAT.ESTIMATE_FROM_HRTF,
+                        "simulation_mode": "angle", #  "angle", "artificial_itd", "artificial_ild"
+                        "artificial_itd": 0.0,      # in seconds (e.g. 0.0005 for 500us)
+                        "artificial_ild": 0.0,      # in dB
+                        "artificial_ild_exp": 0.0, 
+                        "cue_to_apply": "HRTF", #if mode = angle, possibility to apply "HRTF", "itd_only", "ild_only"
                     },
                     "cochlea_params": {
                         "anf_num": (6, 2, 2),            # Example fiber counts (HSR, MSR, LSR)
@@ -46,7 +50,15 @@ class Parameters:
                     },
                     "rng_seed": 42,
                     "omni_noise_level": 0,
-                }
+                },
+                "CI": {
+                    "hrtf_params": {
+                        "subj_number": 0,
+                        "cue_to_apply": "HRTF",
+                    },
+                    "rng_seed": 42,
+                    "omni_noise_level": 0,
+                }  
             }
         )
     )
@@ -70,11 +82,11 @@ class Parameters:
         ANFs2SBCs: int = 3
         ANFs2GBCs: int = 20
         GBCs2MNTBCs: int = 1
-        GBCs2LNTBCs: int = 1 #new
+        GBCs2LNTBCs: int = 1 
         SBCs2LSOs: int = 40
         MNTBCs2LSOs: int = 8
         SBCs2MSOs: int = 3
-        MNTBCs2MSOs: int = 2    
+        MNTBCs2MSOs: int = 3    
         LNTBCs2MSOs: int = 1
         MNTBCs2SPNs: int = 4  
 
@@ -84,18 +96,18 @@ class Parameters:
 
     @dataclass
     class SYN_WEIGHTS:
-        ANFs2SBCs: float = 16.0      
-        ANFs2GBCs: float = 7.0
+        ANFs2SBCs: float = 12#16.0      
+        ANFs2GBCs: float = 5#3#7.0 #high
         #      
         GBCs2LNTBCs: float = 5.0
-        GBCs2MNTBCs: float = 30.0
+        GBCs2MNTBCs: float = 30.0 #high
         #
-        SBCs2LSO: float = 1.0 #5       
-        MNTBCs2LSO: float = -10.0 
+        SBCs2LSO: float = 5 #0.5 #tuned for a single spike   
+        MNTBCs2LSO: float = -80 #tuned for a single spike
         #
-        SBCs2MSO: float = 12.0
-        MNTBCs2MSO: float = -10.0 #-20.0
-        LNTBCs2MSO: float = -10.0 #-20.0
+        SBCs2MSO: float = 6 #12.0 
+        MNTBCs2MSO: float = -8
+        LNTBCs2MSO: float = 0 
         #
         MNTBCs2SPN: float = -40.0 
 
@@ -108,12 +120,12 @@ class Parameters:
         GBCs2LNTBCs: float = 0.5
         #
         SBCs2LSO: float = 2.0
-        MNTBCs2LSO: float = 1.0 #
+        MNTBCs2LSO: float = 0.78#1.28 #
         #
         SBCs2MSOipsi: float = 2.0
         SBCs2MSOcontra: float = 2.0
-        LNTBCs2MSO: float = 1.0 
-        MNTBCs2MSO: float = 1.0
+        LNTBCs2MSO: float = 0.465 
+        MNTBCs2MSO: float = 0.78#1.28
         #
         MNTBCs2SPN: float = 1.0 #0.11 integration time at MNTB/LNTB
 
@@ -128,7 +140,7 @@ class Parameters:
         SBC: float = 26.0 
         GBC: float = 13.0
         LNTBC: float = 12.0   
-        MNTBC: float = 12.0
+        MNTBC: float = 18.9
         LSO: float = 12.0
         MSO: float = 70.0
         SPN: float = 75.0
@@ -138,11 +150,11 @@ class Parameters:
     # ------------------------------------------------------------
     @dataclass
     class G_LEAK:
-        SBC: float = 43.3   # tau = 0.6 ms
+        SBC: float = 43.3   # tau = 0.6 ms    or. 20.0   # tau = 1.3 ms
         GBC: float = 86.6   # tau = 0.15 ms
-        LNTBC: float = 1.33 # tau = 9 ms  
-        MNTBC: float = 1.33 # tau = 9 ms 
-        LSO: float = 24 # tau = 0.5 ms
+        LNTBC: float = 3 # tau = 4 ms  
+        MNTBC: float = 9 # tau = 4 ms 
+        LSO: float = 18.75 # tau = 0.64 ms (#24 # tau = 0.5 ms)
         MSO: float = 70 # tau = 1 ms   
         SPN: float = 75 # tau = 1 ms  
 
@@ -151,12 +163,12 @@ class Parameters:
     # ------------------------------------------------------------
     @dataclass
     class E_L:
-        SBC: float = -65.0 
-        GBC: float = -65.0
+        SBC: float = -66.0 
+        GBC: float = -61.0
         LNTBC: float = -60.0   
-        MNTBC: float = -67.0
+        MNTBC: float = -70.0
         LSO: float = -63.0
-        MSO: float = -57.0
+        MSO: float = -51.0
         SPN: float = -65.0
     
     # ------------------------------------------------------------
@@ -164,12 +176,12 @@ class Parameters:
     # ------------------------------------------------------------
     @dataclass 
     class V_RESET:
-        SBC: float = -67.0   
-        GBC: float = -67.0   
+        SBC: float = -68.0   
+        GBC: float = -63.0   
         LNTBC: float = -62.0
-        MNTBC: float = -69.0
+        MNTBC: float = -72.0
         LSO: float = -65.0
-        MSO: float = -57.0
+        MSO: float = -53.0
         SPN: float = -67.0
 
     # ------------------------------------------------------------
@@ -220,8 +232,8 @@ class Parameters:
         GBC: float = 0.2       
         LNTBC: float = 0.25     
         MNTBC: float = 0.1  
-        LSO: float = 0.5    
-        MSO: float = 0.15
+        LSO: float = 0.2    
+        MSO: float = 0.2
         SPN: float = 0.5        
     # ------------------------------------------------------------ 
     @dataclass
@@ -229,9 +241,9 @@ class Parameters:
         SBC: float = 0.5       
         GBC: float = 0.5       
         LNTBC: float = 3.8     
-        MNTBC: float = 0.35     
-        LSO: float = 1.0
-        MSO: float = 0.3
+        MNTBC: float = 0.17    
+        LSO: float = 0.5#1
+        MSO: float = 0.5
         SPN: float = 1.0
     
     # ------------------------------------------------------------
@@ -243,8 +255,8 @@ class Parameters:
         GBC: float = -75.0
         LNTBC: float = -75.0   
         MNTBC: float = -75.0
-        LSO: float = -75.0
-        MSO: float = -75.0
+        LSO: float = -90
+        MSO: float = -70.0
         SPN: float = -20.0
 
     # ------------------------------------------------------------
@@ -256,8 +268,8 @@ class Parameters:
         GBC: float = 2.0      
         LNTBC: float = 2.0   
         MNTBC: float = 2.0   
-        LSO: float = 0.15   
-        MSO: float = 0.15       
+        LSO: float = 0.2   
+        MSO: float = 0.2       
         SPN: float = 0.15  
     # ------------------------------------------------------------  
     @dataclass
@@ -266,8 +278,8 @@ class Parameters:
         GBC: float = 2.0       
         LNTBC: float = 2.0
         MNTBC: float = 2.0      
-        LSO: float = 0.7
-        MSO: float = 0.7  
+        LSO: float = 0.5 #1.76
+        MSO: float = 0.5 #1.76
         SPN: float = 0.7  
     # ------------------------------------------------------------   
 
@@ -282,7 +294,8 @@ class Parameters:
             default_factory=lambda: {
                 "resolution": 0.01,
                 "rng_seed": 42,
-                "total_num_virtual_procs": 32,
+                "total_num_virtual_procs": 14,
+                "local_num_threads": 14
             }
         )
 
@@ -300,6 +313,14 @@ class Parameters:
         self.TAUS_IN_DECAY = self.TAUS_IN_DECAY()
         self.MEMB_CAPS = self.MEMB_CAPS()
         self.G_LEAK = self.G_LEAK()
+        self.POP_NUM = self.POP_NUM()
+        self.E_L = self.E_L()
+        self.V_RESET = self.V_RESET()
+        self.V_TH = self.V_TH()
+        self.T_REF = self.T_REF()
+        self.EXC_REV = self.EXC_REV()
+        # If INH_REV was also missing from your expected output, add it here too:
+        self.INH_REV = self.INH_REV()
 
 """
 iaf_cond_alpha default params

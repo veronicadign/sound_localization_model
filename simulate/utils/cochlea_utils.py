@@ -10,6 +10,7 @@ CFMAX = 20 * kHz
 ANGLES = [-90, -75, -60, -45, -30, -15, 0, 15, 30, 45, 60, 75, 90]
 SOFA_ANGLES = [90, 75, 60, 45, 30, 15, 0, 345, 330, 315, 300, 285, 270]
 ANGLE_TO_SOFA = {i: j for i, j in zip(ANGLES, SOFA_ANGLES)}
+SOFA_TO_ANGLE = {j: i for i, j in zip(ANGLES, SOFA_ANGLES)}
 
 
 class ITD_REMOVAL_STRAT:
@@ -20,9 +21,9 @@ class ITD_REMOVAL_STRAT:
 @dataclass
 class AnfResponse:
     binaural_anf_spiketrain: dict
-    gated_sound: Sound        # ⬅️ for this angle
-    l_hrtf_sound: Sound       # ⬅️ for this angle
-    r_hrtf_sound: Sound       # ⬅️ for this angle
+    gated_sound: Sound       
+    left_sound: Sound       
+    right_sound: Sound      
 
 
 @dataclass

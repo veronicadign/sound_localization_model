@@ -5,6 +5,7 @@ from sorcery import dict_of
 from utils.custom_sounds import Click, Tone, ToneBurst, WhiteNoise, Click_Train, HarmonicComplex
 from utils.log_utils import logger
 from typing import Union   # ✅ added
+import numpy as np
 
 from cochleas.GammatoneCochlea import COCHLEA_KEY as GAMMATONE_COC_KEY
 from cochleas.GammatoneCochlea import sound_to_spikes as gammatone_cochlea
@@ -12,9 +13,11 @@ from cochleas.TanCarneyCochlea import COCHLEA_KEY as TC_COC_KEY
 from cochleas.TanCarneyCochlea import sound_to_spikes as tc_cochlea
 from cochleas.ZilanyCochlea import COCHLEA_KEY as ZI_COC_KEY
 from cochleas.ZilanyCochlea import sound_to_spikes as zi_cochlea
+from cochleas.CICochlea import COCHLEA_KEY as CI_COC_KEY
+from cochleas.CICochlea import sound_to_spikes as ci_cochlea
 
 from utils.cochlea_utils import ANGLES, NUM_ANF_PER_HC, NUM_CF, AnfResponse
-import nest
+
 
 
 SOUND_FREQUENCIES = [100 * Hz, 1 * kHz, 10 * kHz]
@@ -24,6 +27,7 @@ COCHLEAS = {
     GAMMATONE_COC_KEY: gammatone_cochlea,
     TC_COC_KEY: tc_cochlea,
     ZI_COC_KEY: zi_cochlea,
+    CI_COC_KEY: ci_cochlea,
 }
 
 
@@ -47,6 +51,7 @@ def create_sound_key(sound):
     elif type(sound) is Click_Train:
         sound_type = "click_train"
         level = round(sound.peak)
+        add_info = f"interval_{sound.interval}"
     elif type(sound) is HarmonicComplex:
         sound_type = "harmonic"
     else:
@@ -57,34 +62,35 @@ def create_sound_key(sound):
         return f"{sound_type}_{level}dB"
 
 
-def load_anf_response(sound, angle, cochlea_key, params, ignore_cache=False):
-
+def load_anf_response(sound, condition_val, cochlea_key, params, ignore_cache=False):
+    # Get the specific cochlea function (Zilany, Gammatone, etc.)
     cochlea_func: MemorizedFunc = COCHLEAS[cochlea_key]
-    logger.info(f"Subject chosen: {params[cochlea_key]['hrtf_params']['subj_number']}")
-    params = params[cochlea_key]
+    
+    # Extract the params for this specific cochlea
+    specific_params = params[cochlea_key]
+    
+    # Get the mode to make logging clearer
+    mode = specific_params['hrtf_params']['simulation_mode']    
+    logger.info(f"Subject: {specific_params['hrtf_params']['subj_number']} | Mode: {mode}")
 
-    if not cochlea_func.check_call_in_cache(sound, angle, params):
-        logger.info("[load_anf_response] Saved ANF not found. Regenerating...")
+    # Joblib cache check using condition_val (could be deg, seconds, or dB)
+    if not cochlea_func.check_call_in_cache(sound, condition_val, specific_params):
+        logger.info(f"[load_anf_response] Saved ANF not found for {mode}={condition_val}. Regenerating...")
 
     if ignore_cache:
-        logger.info("[load_anf_response] Ignoring cache — forcing recompute.")
         cochlea_func = cochlea_func.call
-
-    logger.info(f"[load_anf_response] Generating ANF for "
-                f"sound={sound}, angle={angle}, key={cochlea_key}")
-
-    if ignore_cache:
-        cochlea_func = cochlea_func.call  # forces execution
     try:
-        anf = cochlea_func(sound, angle, params, plot_spikes=False)
+        # Every cochlea function in COCHLEAS must now handle condition_val based on mode
+        anf = cochlea_func(sound, condition_val, specific_params, plot_spikes=False)
     except TypeError as e:
-        if "unexpected" in e.args[0]:
-            logger.error(f"{e}, please check the signature of cochlea")
+        logger.error(f"Error calling {cochlea_key}: {e}")
         raise e
+        
     return anf
 
 
 def spikes_to_nestgen(anf_response: AnfResponse):
+    import nest
     nest.set_verbosity("M_ERROR")
     anfs_per_ear = {}
     for channel, response_ANF in anf_response.binaural_anf_spiketrain.items():

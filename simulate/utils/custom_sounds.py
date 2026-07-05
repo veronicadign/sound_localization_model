@@ -171,27 +171,80 @@ class Click:
 class Click_Train:
     sound: b2h.Sound
 
-    def __init__(self, duration=DEFAULT_SOUND_DURATION, click_duration = DEFAULT_CLICKS_DURATION, interval = DEFAULT_CLICKS_INTERVAL, level=None, **kwargs):
+    def __init__(
+        self,
+        duration=DEFAULT_SOUND_DURATION,
+        click_duration=DEFAULT_CLICKS_DURATION,
+        interval=DEFAULT_CLICKS_INTERVAL,
+        level=None,
+        ramp_ms: float = 0.0,
+        offset_silence_duration=0 * b2.ms,
+        **kwargs,
+    ):
         if level is not None:
             self.peak = level
 
         if isinstance(click_duration, b2.Quantity) and isinstance(interval, b2.Quantity):
             c = b2h.click(click_duration, self.peak)
             i = b2h.silence(interval)
-            p = b2h.Sound.sequence(c,i)
-            n = round(duration/(click_duration + interval))
+            p = b2h.Sound.sequence(c, i)
+            n = round(duration / (click_duration + interval))
             train = p.repeat(n)
         else:
             c = b2h.click(click_duration, self.peak)
-            click_duration_ms = click_duration*(1/(c.samplerate / b2.Hz))*1000*b2.ms
-            interval_ms = interval*(1/(c.samplerate / b2.Hz))*1000*b2.ms
+            click_duration_ms = click_duration * (1 / (c.samplerate / b2.Hz)) * 1000 * b2.ms
+            interval_ms = interval * (1 / (c.samplerate / b2.Hz)) * 1000 * b2.ms
             i = b2h.silence(interval_ms)
-            p = b2h.Sound.sequence(c,i)
-            n = round(int(duration/(click_duration_ms + interval_ms)))
+            p = b2h.Sound.sequence(c, i)
+            n = round(int(duration / (click_duration_ms + interval_ms)))
             train = p.repeat(n)
-    
-        self.sound = train
+
+        self.sound = gate_and_append_silence(
+            train,
+            ramp_ms=ramp_ms,
+            offset_silence_duration=offset_silence_duration,
+        )
         self.number = n
+        self.interval = interval
+
+class DualTone:
+    """Sum of two pure tones, each with independent frequency and level."""
+
+    sound: b2h.Sound
+
+    def __init__(
+        self,
+        frequency1: b2.Quantity,
+        frequency2: b2.Quantity,
+        duration=DEFAULT_SOUND_DURATION,
+        level1=None,
+        level2=None,
+        ramp_ms: float = 10.0,
+        offset_silence_duration=0 * b2.ms,
+        **kwargs,
+    ):
+        self.frequency1 = frequency1
+        self.frequency2 = frequency2
+
+        tone1 = b2h.Sound.tone(frequency1, duration, **kwargs)
+        tone2 = b2h.Sound.tone(frequency2, duration, **kwargs)
+
+        if level1 is not None:
+            tone1.level = level1
+        if level2 is not None:
+            tone2.level = level2
+
+        # Sum the two tones
+        combined = b2h.Sound(
+            np.array(tone1.data) + np.array(tone2.data),
+            samplerate=tone1.samplerate
+        )
+
+        self.sound = gate_and_append_silence(
+            combined,
+            ramp_ms=ramp_ms,
+            offset_silence_duration=offset_silence_duration,
+        )
 
 class ToneFromAngle(Tone):
     # x = ToneFromAngle(20, 20 * b2.Hz)
