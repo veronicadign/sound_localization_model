@@ -11,7 +11,7 @@ Options:
   --angle DEGREES          Sound azimuth angle (default: 0)
   --side L|R|both          Brain side (default: L)
   --n-cells N              MSO cells to simulate (default: 100)
-  --electrodes E [E ...]   Subset of: Cz A1 A2 (default: all three)
+  --derivation Cz-M1|Cz-M2|Cz-avg  Differential to plot (default: Cz-M1)
   --condition binaural|left_ear|right_ear  Acoustic condition (default: binaural)
 
 Outputs saved to RESULTS/abr_tmp/output_<stem>_angle<A>_<side>/:
@@ -35,6 +35,7 @@ import sys
 
 import numpy as np
 import h5py
+import scipy.signal
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -54,7 +55,8 @@ HOC_FILE  = os.path.join(REPO_ROOT, 'MSO_models', 'mso_model.hoc')
 
 sys.path.insert(0, os.path.join(REPO_ROOT, 'LFP_reconstruction'))
 from main_reconstruct import (
-    MSOPopulation, N_MSO_TOTAL, MSO_DENSITY_MM3,
+    MSOPopulation, N_MSO_TOTAL,
+    ELLIPSE_RADIUS_X, ELLIPSE_RADIUS_Y,
     LAYER_BOUNDARIES, _pic_stem, _extract_spikes,
 )
 
@@ -67,6 +69,22 @@ V_INIT = -57.0   # mV
 N_CELLS = 15500
 
 # ---------------------------------------------------------------------------
+# ABR bandpass filter (clinical standard: 150–3000 Hz)
+# ---------------------------------------------------------------------------
+def _bandpass(signal, lo=150., hi=None, fs=None, order=4):
+    """Zero-phase Butterworth high-pass (hi=None) or bandpass filter, row-wise."""
+    if fs is None:
+        fs = 1.0 / (DT * 1e-3)
+    if hi is None:
+        sos = scipy.signal.butter(order, lo, btype='high', fs=fs, output='sos')
+    else:
+        sos = scipy.signal.butter(order, [lo, hi], btype='band', fs=fs, output='sos')
+    if signal.ndim == 1:
+        return scipy.signal.sosfiltfilt(sos, signal)
+    return np.stack([scipy.signal.sosfiltfilt(sos, row) for row in signal])
+
+
+# ---------------------------------------------------------------------------
 # 4-sphere head model parameters
 # All spatial units: µm  (lfpykit-native)
 # ---------------------------------------------------------------------------
@@ -74,22 +92,24 @@ FOUR_SPHERE_RADII  = [79_000., 80_000., 85_000., 90_000.]  # µm: brain,CSF,skul
 FOUR_SPHERE_SIGMAS = [0.33, 1.79, 0.008, 0.3]              # S/m
 
 # MSO dipole source position in head-centred coordinates (µm).
-# Approximate: inferior pons, ~6 mm lateral, 34 mm posterior, 39 mm inferior.
-# TODO: verify against Human Brain Atlas
-#   such as -> https://ebrains.eu/data-tools-services/brain-atlases/human-brain
+#
+# MNI152 centroids (from MRI):
+#   R MSO MNI = [+5, -32, -35] mm,  L MSO MNI = [-5, -32, -35] mm
+#
+# MNI -> head-centred (rigid shift, no rotation):
+#   head_centre_MNI ~= [0, -18.3, +5.5] mm  (Koessler et al. 2009 Cz anchor)
+#   head_y = -32 + 18.3 = -13.7 mm,  head_z = -35 - 5.5 = -40.5 mm
+# |r| ~= 43.0 mm < 79 mm brain sphere    Uncertainty: +-5 mm
+# See ABR_reconstruction/plot_mso_position.py for visualisation.
+#
+# Previous estimate (rigid shift only):
+# MSO_POS_UM = {
+#     'R': np.array([ 5_000., -13_700., -40_500.]),
+#     'L': np.array([-5_000., -13_700., -40_500.]),
+# }
 MSO_POS_UM = {
-    'R': np.array([ 6_000., -34_000., -39_000.]),
-    'L': np.array([-6_000., -34_000., -39_000.]),
-}
-
-# MSO dipole source position in head-centred coordinates (µm).
-# Derived from literature MNI152 centroid (Krumbholz et al. 2005; Duvernoy
-# brainstem atlas) converted via Cz anchor (Koessler et al. 2009):
-#   MNI152: [±6, -38, -38] mm  →  head-centred: [±6, -19.7, -43.5] mm
-# Coordinate uncertainty: ~5-10 mm (Cz MNI spread + literature spread).
-MSO_POS_UM = {
-    'R': np.array([ 6_000., -19_700., -43_500.]),
-    'L': np.array([-6_000., -19_700., -43_500.]),
+    'R': np.array([ 5_000., -18_700., -29_520.]),
+    'L': np.array([-5_000., -18_700., -29_520.]),
 }
 
 
@@ -103,11 +123,13 @@ def _on_scalp(v):
 
 
 # Scalp electrode positions (µm). FourSphereVolumeConductor requires r < r_scalp.
-# Cz: vertex. A1/A2: left/right mastoid (10-20 system approximation).
+# Clinical 10-20 system: Cz = vertex, M1 = left mastoid, M2 = right mastoid.
+# Standard ABR derivation: Cz−M1 (ipsilateral left) / Cz−M2 (ipsilateral right),
+# vertex-positive upward. Ground electrode Fz is not modelled (no effect in 4-sphere).
 ELECTRODE_POS = {
     'Cz': np.array([0., 0., _SCALP_R]),
-    'A1': _on_scalp(np.array([-74_300., -42_200., -28_100.])),
-    'A2': _on_scalp(np.array([ 74_300., -42_200., -28_100.])),
+    'M1': _on_scalp(np.array([-74_300., -42_200., -28_100.])),  # left mastoid
+    'M2': _on_scalp(np.array([ 74_300., -42_200., -28_100.])),  # right mastoid
 }
 
 # ---------------------------------------------------------------------------
@@ -120,21 +142,22 @@ ELECTRODE_POS = {
 #   Right MSO: medial dend (+model_z) → toward midline → −head_x  (head_x = −model_z)
 #   Left  MSO: medial dend (+model_z) → toward midline → +head_x  (head_x = +model_z)
 #
-# head_y: anterior-posterior axis (tonotopic: low CF rostral/ant, high CF caudal/post)
-#   model_x increases = higher CF = more posterior = lower head_y → head_y = −model_x
+# head_y: anterior-posterior axis (tonotopic: low CF posterior, high CF anterior)
+#   Literature: lowest CF in posterior MSO, highest CF in anterior MSO.
+#   model_x increases = higher CF = more anterior = higher head_y → head_y = +model_x
 #   Same sign for both sides (tonotopy runs the same anatomical direction bilaterally).
 #
 # head_z: determined by right-hand rule (cross product of rows 0 and 1, det = +1)
-#   R_R: [0,0,−1] × [−1,0,0] = (0, 1, 0)  → head_z = +model_y
-#   R_L: [0,0,+1] × [−1,0,0] = (0,−1, 0)  → head_z = −model_y
+#   R_R: [0,0,−1] × [+1,0,0] = (0,−1, 0)  → head_z = −model_y
+#   R_L: [0,0,+1] × [+1,0,0] = (0,+1, 0)  → head_z = +model_y
 # ---------------------------------------------------------------------------
 ROTATION = {
     'R': np.array([[ 0., 0.,-1.],
-                   [-1., 0., 0.],
-                   [ 0., 1., 0.]]),
-    'L': np.array([[ 0., 0., 1.],
-                   [-1., 0., 0.],
+                   [ 1., 0., 0.],
                    [ 0.,-1., 0.]]),
+    'L': np.array([[ 0., 0., 1.],
+                   [ 1., 0., 0.],
+                   [ 0., 1., 0.]]),
 }
 
 
@@ -151,15 +174,6 @@ def _side_condition(condition, side):
        (condition == 'right_ear' and side == 'R'):
         return 'ipsilateral'
     return 'contralateral'
-
-
-# ---------------------------------------------------------------------------
-# ABR population: identical to MSOPopulation but uses CurrentDipoleMoment
-# probe (output key: 'CurrentDipoleMoment', shape (3, T), nA·µm).
-# hybridLFPy.Population.cellsim stores probe.data under probe.__class__.__name__.
-# ---------------------------------------------------------------------------
-class MSO_ABR_Population(MSOPopulation):
-    pass   # probe passed at construction; no override needed
 
 
 # ---------------------------------------------------------------------------
@@ -218,7 +232,7 @@ def _run_one_side(side, args, meta):
     probe     = CurrentDipoleMoment(None)
     pop_label = f'MSO_{side}'
 
-    pop = MSO_ABR_Population(
+    pop = MSOPopulation(
         n_syn_per_pop=n_syn_per_pop,
         y=pop_label,
         cellParams={
@@ -229,9 +243,11 @@ def _run_one_side(side, args, meta):
         simulationParams={'rec_imem': True},
         populationParams={
             'number':             args.n_cells,
-            'radius':             61.5,
-            'z_min':             -50.0, 'z_max': 50.0,
-            'min_cell_interdist': 1.5,
+            'radius':             ELLIPSE_RADIUS_Y,
+            'radius_x':           ELLIPSE_RADIUS_X,
+            'radius_y':           ELLIPSE_RADIUS_Y,
+            'z_min': -100.0, 'z_max': 100.0,
+            'min_cell_interdist': 1.0,
             'min_r':              np.array([[0.], [0.]]),
         },
         layerBoundaries=LAYER_BOUNDARIES,
@@ -328,7 +344,10 @@ def _apply_head_model(p_head_by_side, output_dir, electrode_names):
         V_side   = fsc.get_dipole_potential(p_head, r_dipole)   # (n_e, T) mV
         V_mV     = V_side if V_mV is None else V_mV + V_side
 
-    V_uV = V_mV * 1e3   # mV → µV
+    V_uV = _bandpass(V_mV * 1e3, hi=3000., lo=150.)  # mV → µV, high-pass 150 Hz
+
+    # for bandpass filter OFF:
+    # V_uV = V_mV * 1e3
 
     srate = 1.0 / (DT * 1e-3)
     abr_path = os.path.join(output_dir, 'ABR.h5')
@@ -346,40 +365,77 @@ def _apply_head_model(p_head_by_side, output_dir, electrode_names):
 # ---------------------------------------------------------------------------
 # Plotting
 # ---------------------------------------------------------------------------
-def _plot_abr(output_dir, V_uV, electrode_names, srate, angle, side, n_cells):
-    n_e, n_t = V_uV.shape
+def _plot_abr(output_dir, V_uV, electrode_names, srate, angle, side, n_cells,
+              derivation='Cz-M1'):
+    import matplotlib.gridspec as gridspec
+
+    n_t  = V_uV.shape[1]
     tvec = np.arange(n_t) / srate * 1e3   # ms
-    colors = ['steelblue', 'firebrick', 'forestgreen']
 
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5), constrained_layout=True)
+    has_cz = 'Cz' in electrode_names
+    has_m1 = 'M1' in electrode_names
 
-    ax = axes[0]
-    for i, name in enumerate(electrode_names):
-        ax.plot(tvec, V_uV[i], label=name, color=colors[i % len(colors)], lw=1.0)
-    ax.set_xlabel('Time (ms)')
-    ax.set_ylabel('Potential (µV)')
-    ax.set_title(f'MSO ABR — angle {angle}° | side {side} | N={n_cells}')
-    ax.legend()
-    ax.axhline(0, color='k', lw=0.5, ls='--')
+    fig = plt.figure(figsize=(13, 8), constrained_layout=True)
+    gs  = gridspec.GridSpec(2, 2, figure=fig, height_ratios=[1, 1])
 
-    ax2 = axes[1]
-    if 'Cz' in electrode_names:
-        cz_idx = electrode_names.index('Cz')
-        for ref, col in [('A1', 'firebrick'), ('A2', 'forestgreen')]:
-            if ref in electrode_names:
-                ref_idx = electrode_names.index(ref)
-                ax2.plot(tvec, V_uV[cz_idx] - V_uV[ref_idx],
-                         label=f'Cz−{ref}', color=col, lw=1.0)
-    ax2.set_xlabel('Time (ms)')
-    ax2.set_ylabel('Differential ABR (µV)')
-    ax2.set_title('Differential ABR (Cz – mastoid)')
-    ax2.legend()
-    ax2.axhline(0, color='k', lw=0.5, ls='--')
+    ax_cz  = fig.add_subplot(gs[0, 0])
+    ax_m1  = fig.add_subplot(gs[0, 1])
+    ax_bot = fig.add_subplot(gs[1, :])
+
+    def _plot_single(ax, label, color, title):
+        if label in electrode_names:
+            idx = electrode_names.index(label)
+            ax.plot(tvec, V_uV[idx], color=color, lw=0.9, label=label)
+        ax.axhline(0, color='k', lw=0.4, ls=':')
+        ax.set_ylabel('Potential (µV)')
+        ax.set_xlabel('Time (ms)')
+        ax.set_title(title)
+        ax.legend(fontsize=9)
+
+    _plot_single(ax_cz, 'Cz', 'steelblue',
+                 f'Cz (vertex)  |  angle {angle}°  |  side {side}  |  N={n_cells}')
+    _plot_single(ax_m1, 'M1', 'firebrick', 'M1 (left mastoid)')
+
+    # Compute chosen differential
+    cz = V_uV[electrode_names.index('Cz')]
+    m1 = V_uV[electrode_names.index('M1')]
+    m2 = V_uV[electrode_names.index('M2')]
+    if derivation == 'Cz-M1':
+        diff, deriv_label = cz - m1, 'Cz−M1'
+    elif derivation == 'Cz-M2':
+        diff, deriv_label = cz - m2, 'Cz−M2'
+    else:
+        diff, deriv_label = cz - (m1 + m2) / 2.0, 'Cz−(M1+M2)/2'
+
+    ax_bot.plot(tvec, diff, color='darkorchid', lw=0.9, label=deriv_label)
+    ax_bot.axhline(0, color='k', lw=0.4, ls=':')
+    ax_bot.set_ylabel('Amplitude (µV)')
+    ax_bot.set_xlabel('Time (ms)')
+    ax_bot.set_title(f'{deriv_label}  (vertex-positive upward)')
+    ax_bot.legend(fontsize=9)
+
+    fig.suptitle('MSO ABR  |  vertex-positive upward',
+                 fontsize=11, fontweight='bold')
 
     fig_path = os.path.join(output_dir, 'figures', 'mso_abr.png')
     fig.savefig(fig_path, dpi=150)
     plt.close(fig)
     print(f'ABR figure saved → {fig_path}')
+
+    # Second figure: derivation only, more square aspect ratio
+    fig2, ax2 = plt.subplots(figsize=(7, 5), constrained_layout=True)
+    ax2.plot(tvec, diff, color='darkorchid', lw=0.9, label=deriv_label)
+    ax2.axhline(0, color='k', lw=0.4, ls=':')
+    ax2.set_xlabel('Time (ms)')
+    ax2.set_ylabel('Amplitude (µV)')
+    ax2.set_title(f'{deriv_label}  |  angle {angle}°  |  side {side}  |  N={n_cells}')
+    ax2.legend(fontsize=9)
+    fig2.suptitle('MSO ABR  |  vertex-positive upward',
+                  fontsize=10, fontweight='bold')
+    fig2_path = os.path.join(output_dir, 'figures', 'mso_abr_derivation.png')
+    fig2.savefig(fig2_path, dpi=150)
+    plt.close(fig2)
+    print(f'Derivation figure saved → {fig2_path}')
 
 
 def _plot_phase_cycle_abr(output_dir, V_uV, electrode_names, srate,
@@ -432,8 +488,9 @@ def main():
     parser.add_argument('--side',       type=str, default='L',
                         choices=['L', 'R', 'both'])
     parser.add_argument('--n-cells',    type=int, default=N_CELLS, dest='n_cells')
-    parser.add_argument('--electrodes', nargs='+', default=['Cz', 'A1', 'A2'],
-                        choices=['Cz', 'A1', 'A2'])
+    parser.add_argument('--derivation', type=str, default='Cz-M1',
+                        choices=['Cz-M1', 'Cz-M2', 'Cz-avg'],
+                        help='Differential derivation to plot (Cz-avg = Cz − mean(M1,M2))')
     parser.add_argument('--condition', type=str, default='binaural',
                         choices=['binaural', 'left_ear', 'right_ear'])
     args = parser.parse_args()
@@ -473,12 +530,12 @@ def main():
         else:
             final_dir = output_dirs[sides[0]]
 
-        electrode_names = args.electrodes
+        electrode_names = ['Cz', 'M1', 'M2']
         V_uV, srate = _apply_head_model(p_head_by_side, final_dir, electrode_names)
 
         #stim_freq = meta.get('stim_freq_hz')
         _plot_abr(final_dir, V_uV, electrode_names, srate,
-                  args.angle, args.side, args.n_cells)
+                  args.angle, args.side, args.n_cells, derivation=args.derivation)
         #_plot_phase_cycle_abr(final_dir, V_uV, electrode_names, srate,
                               #stim_freq, args.angle, args.side, args.n_cells)
 

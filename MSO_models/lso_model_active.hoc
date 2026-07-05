@@ -1,0 +1,125 @@
+// LSO multicompartment morphology — active conductances
+// Principal neuron: Helfert & Schwartz 1987 (gerbil), Haragopal & Winters 2023.
+// Channel kinetics: Rothman & Manis 2003 (klt, kht, nax, ih); AHP (ahp.mod).
+//
+// 3 primary dendrites (fusiform/multipolar principal cell ~75% of LSO):
+//   dend_A: along +z (primary, 150 um)
+//   dend_B: along -z (primary, 150 um)
+//   dend_C: along +x / dorsal (asymmetric branch, 80 um)
+// Axon: along -y (caudal).
+//
+// Note: dend_A/B placed along z (mediolateral / probe axis) for compatibility
+// with the HybridLFPy z-based layer-boundary assignment. Anatomically, LSO
+// principal-neuron dendrites are predominantly rostrocaudal (y-axis), which
+// would produce a weaker z-dipole than modelled here.
+//
+// Passive params: E_L = -63 mV (params.py E_L.LSO); tau ~ 0.5 ms.
+// Conductances:
+//   soma:       klt=0.010, kht=0.010, nax=0.10, ih=0.0005, ahp=0.002  S/cm2
+//   dendrites:  klt=0.002, ih=0.0001                                   S/cm2
+//   axon:       nax=0.35,  klt=0.010, kht=0.015, ih=0.0005             S/cm2
+
+create soma, dend_A, dend_B, dend_C, axon
+
+access soma
+
+soma {
+    nseg = 1
+    Ra   = 150
+    cm   = 1.0
+    insert pas
+    g_pas = 2.0e-3
+    e_pas = -63.0
+    insert klt
+    gbar_klt = 0.010
+    insert kht
+    gbar_kht = 0.010
+    insert ih
+    gbar_ih = 0.0005
+    insert nax
+    gbar_nax = 0.10
+    ena = 55.0
+    ek  = -77.0
+    insert lso_ahp
+    gbar_lso_ahp = 0.002
+    pt3dadd(0, 0, -7.5, 15)
+    pt3dadd(0, 0,  7.5, 15)
+}
+
+// Primary dendrite A  (+z, 150 um, tapering 3.5 -> 1.5 um)
+dend_A {
+    nseg = 11
+    Ra   = 150
+    cm   = 1.0
+    insert pas
+    g_pas = 2.0e-3
+    e_pas = -63.0
+    insert klt
+    gbar_klt = 0.002
+    insert ih
+    gbar_ih = 0.0001
+    ek = -77.0
+    pt3dadd(0, 0,   7.5, 3.5)
+    pt3dadd(0, 0, 157.5, 1.5)
+}
+
+// Primary dendrite B  (-z, 150 um, tapering 3.5 -> 1.5 um)
+dend_B {
+    nseg = 11
+    Ra   = 150
+    cm   = 1.0
+    insert pas
+    g_pas = 2.0e-3
+    e_pas = -63.0
+    insert klt
+    gbar_klt = 0.002
+    insert ih
+    gbar_ih = 0.0001
+    ek = -77.0
+    pt3dadd(0, 0,   -7.5, 3.5)
+    pt3dadd(0, 0, -157.5, 1.5)
+}
+
+// Dorsal asymmetric branch  (+x, 80 um, tapering 3.0 -> 1.5 um)
+dend_C {
+    nseg = 7
+    Ra   = 150
+    cm   = 1.0
+    insert pas
+    g_pas = 2.0e-3
+    e_pas = -63.0
+    insert klt
+    gbar_klt = 0.002
+    insert ih
+    gbar_ih = 0.0001
+    ek = -77.0
+    pt3dadd( 0, 0, 0, 3.0)
+    pt3dadd(80, 0, 0, 1.5)
+}
+
+// Axon (-y / caudal, 150 um)
+axon {
+    nseg = 5
+    Ra   = 150
+    cm   = 1.0
+    insert pas
+    g_pas = 2.0e-3
+    e_pas = -63.0
+    insert nax
+    gbar_nax = 0.35
+    ena = 55.0
+    insert klt
+    gbar_klt = 0.010
+    insert kht
+    gbar_kht = 0.015
+    insert ih
+    gbar_ih = 0.0005
+    ek = -77.0
+    pt3dadd(  0,   -7.5, 0, 1.5)
+    pt3dadd(  0, -157.5, 0, 1.5)
+}
+
+connect dend_A(0), soma(1)
+connect dend_B(0), soma(0)
+connect dend_C(0), soma(0.5)
+connect axon(0),   soma(0.5)

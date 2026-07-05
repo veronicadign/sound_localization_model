@@ -68,8 +68,9 @@ def extract_and_save(pic_file, angle, side, spikes_dir):
     with open(pic_file, 'rb') as f:
         result = dill.load(f, ignore=True)
 
-    data_ipsi   = result['angle_to_rate'][angle][side]
-    data_contra = result['angle_to_rate'][angle][contra_side]
+    angle_map   = result.get('angle_to_rate') or result['cue_to_rate']
+    data_ipsi   = angle_map[angle][side]
+    data_contra = angle_map[angle][contra_side]
 
     try:
         stim_freq_hz = float(result['sounds']['base_sound'].frequency)

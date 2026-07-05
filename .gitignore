@@ -6,6 +6,7 @@ logs
 IHF_SPIKES
 .vscode
 .claude
+CLAUDE.md
 ANF_SPIKETRAINS
 results/*
 RESULTS/
@@ -18,4 +19,5 @@ results
 simulate/jobs/*
 LFP_reconstruction/run_commands.txt
 LFP_reconstruction/report_lfp_reconstruction.tex
+ABR_reconstruction/figures
 x86_64

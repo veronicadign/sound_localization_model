@@ -25,6 +25,9 @@ soma {
     insert ih
     gbar_ih = 0.00086
     ek = -77.0
+    insert nax
+    gbar_nax = 0.10
+    ena = 55.0
     pt3dadd(0, 0, -10, 20)
     pt3dadd(0, 0, 10, 20)
 }
@@ -61,5 +64,29 @@ dend_lateral {
     pt3dadd(0, 0, -160, 3.5)
 }
 
+create axon
+
+axon {
+    nseg = 5
+    Ra   = 150
+    cm   = 1.537
+    insert pas
+    g_pas = 1.537e-3
+    e_pas = -57.0
+    insert nax
+    gbar_nax = 0.35
+    ena = 55.0
+    insert klt
+    gbar_klt = 0.017
+    insert kht
+    gbar_kht = 0.015
+    insert ih
+    gbar_ih = 0.00086
+    ek = -77.0
+    pt3dadd(0, 0, -160, 1.5)
+    pt3dadd(0, 0, -310, 1.5)
+}
+
 connect dend_medial(0), soma(1)
 connect dend_lateral(0), soma(0)
+connect axon(0), dend_lateral(1)

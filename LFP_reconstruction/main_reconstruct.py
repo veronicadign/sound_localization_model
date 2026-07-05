@@ -27,6 +27,7 @@ import numpy as np
 import h5py
 
 import LFPy
+import neuron
 import lfpykit.models as lfpykit_models
 import hybridLFPy
 from hybridLFPy.population import Population
@@ -40,6 +41,11 @@ RANK = COMM.Get_rank()
 # ---------------------------------------------------------------------------
 REPO_ROOT  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOC_FILE   = os.path.join(REPO_ROOT, 'MSO_models', 'mso_model.hoc')
+try:
+    neuron.load_mechanisms(os.path.join(REPO_ROOT, 'MSO_models'))
+except RuntimeError as _e:
+    if 'already exists' not in str(_e):
+        raise
 SPIKES_DIR = os.path.join(REPO_ROOT, 'RESULTS', 'lfp_tmp', 'spikes')
 OUTPUT_DIR = os.path.join(REPO_ROOT, 'RESULTS', 'lfp_tmp', 'output')
 META_FILE  = os.path.join(SPIKES_DIR, 'metadata.json')
@@ -47,7 +53,7 @@ META_FILE  = os.path.join(SPIKES_DIR, 'metadata.json')
 # ---------------------------------------------------------------------------
 # Simulation parameters  (module-level for convergence_test.py)
 # ---------------------------------------------------------------------------
-DT           = 0.026   # ms #0.0625
+DT           = 0.026   # ms #0.0625 0.026
 TSTOP        = 50.0     # ms
 V_INIT       = -57.0    # mV  (E_L.MSO) -57
 N_CELLS           = 15500    # default representative cell count
@@ -55,9 +61,25 @@ N_MSO_TOTAL       = 15500   # MSO neurons per side in NEST sim (params.py POP_NU
 MSO_DENSITY_MM3   = 13049.0 # human MSO packing density (neurons/mm³)
 
 # ---------------------------------------------------------------------------
+# MSO frequency band (ERB-scale tonotopic mapping)
+# ---------------------------------------------------------------------------
+MSO_FREQ_MIN = 200.0    # Hz
+MSO_FREQ_MAX = 4000.0   # Hz
+_CFMIN_HZ    = 125.0
+_CFMAX_HZ    = 20000.0
+
+def _erb_n(f):
+    return 21.3 * np.log10(1.0 + f / 229.0)
+
+def mso_freq_to_idx(freq_hz: float) -> int:
+    """Convert Hz → MSO tonotopic index via ERB scale, clipped to [0, N_MSO_TOTAL-1]."""
+    frac = (_erb_n(freq_hz) - _erb_n(_CFMIN_HZ)) / (_erb_n(_CFMAX_HZ) - _erb_n(_CFMIN_HZ))
+    return int(round(float(np.clip(frac, 0.0, 1.0)) * (N_MSO_TOTAL - 1)))
+
+# ---------------------------------------------------------------------------
 # MSO elliptic cylinder geometry
 # ---------------------------------------------------------------------------
-ELLIPSE_RADIUS_X = 443.0    # μm  rostrocaudal half-axis #265
+ELLIPSE_RADIUS_X = 255.0    # μm  rostrocaudal half-axis #265
 ELLIPSE_RADIUS_Y = 2845.0   # μm  dorsoventral half-axis
 
 # ---------------------------------------------------------------------------
@@ -116,29 +138,32 @@ class MSOPopulation(Population):
         },
     }
 
-    def __init__(self, n_syn_per_pop=None, **kwargs):
+    def __init__(self, n_syn_per_pop=None, mso_idx_lo=0, mso_idx_hi=None, **kwargs):
         self.n_syn_per_pop = n_syn_per_pop or {}
+        self.mso_idx_lo = mso_idx_lo
+        self.mso_idx_hi = mso_idx_hi if mso_idx_hi is not None else N_MSO_TOTAL - 1
         super().__init__(**kwargs)
 
     def get_all_SpCells(self):
         """Tonotopic x_to_one assignment (mirrors NEST custom connector)."""
-        n_cells  = self.POPULATION_SIZE   # number being simulated
-        N_mso    = N_MSO_TOTAL            # 15500 per side
-        SpCells  = {}
+        n_cells = self.POPULATION_SIZE
+        idx_lo  = self.mso_idx_lo
+        idx_hi  = self.mso_idx_hi
+        SpCells = {}
 
         for cellindex in self.RANK_CELLINDICES:
-            # Map simulated index → global MSO tonotopic index (uniform sample)
-            mso_idx = (int(round(cellindex * (N_mso - 1) / (n_cells - 1)))
-                       if n_cells > 1 else 0)
+            # Map simulated index → MSO tonotopic index within [idx_lo, idx_hi]
+            mso_idx = (idx_lo + int(round(cellindex * (idx_hi - idx_lo) / (n_cells - 1)))
+                       if n_cells > 1 else idx_lo)
 
             SpCells[cellindex] = {}
-            for X in self.X: # loops through each presynaptic population
-                nodes  = self.networkSim.nodes[X]   # 1-based contiguous GIDs
+            for X in self.X:
+                nodes  = self.networkSim.nodes[X]
                 N_pre  = len(nodes)
                 n_src  = self.n_syn_per_pop.get(X, 1)
 
-                # x_to_one window: same formula as NEST custom connector
-                step      = (N_pre - n_src) / max(N_mso - 1, 1)
+                # step uses N_MSO_TOTAL to match NEST wiring; mso_idx clamped to [idx_lo, idx_hi]
+                step      = (N_pre - n_src) / max(N_MSO_TOTAL - 1, 1)
                 pre_start = min(int(round(mso_idx * step)), N_pre - n_src)
                 window    = nodes[pre_start : pre_start + n_src]
 
@@ -196,33 +221,30 @@ class MSOPopulation(Population):
 
     def draw_rand_pos(self, radius_x=ELLIPSE_RADIUS_X, radius_y=ELLIPSE_RADIUS_Y,
                       z_min=0.0, z_max=0.0, min_cell_interdist=1.0, **kwargs):
-        """Uniform sampling inside an elliptic cylinder (x/rx)²+(y/ry)²≤1."""
+        """Uniform sampling inside the tonotopic x-slice of the ellipse, sorted by x.
+
+        x is restricted to [x_lo, x_hi] derived from mso_idx_lo/hi so that the
+        probe at x=0 stays at the same relative tonotopic position as the full-range
+        mapping (preserves probe-to-responding-cell distance).
+        """
         N = self.POPULATION_SIZE
-        x = (np.random.rand(N) - 0.5) * 2 * radius_x
-        y = (np.random.rand(N) - 0.5) * 2 * radius_y
-        z = np.random.rand(N) * (z_max - z_min) + z_min
+        x_lo = -radius_x + self.mso_idx_lo / (N_MSO_TOTAL - 1) * 2.0 * radius_x
+        x_hi = -radius_x + self.mso_idx_hi / (N_MSO_TOTAL - 1) * 2.0 * radius_x
 
-        outside = np.where((x / radius_x)**2 + (y / radius_y)**2 > 1)[0]
-        while len(outside):
-            x[outside] = (np.random.rand(len(outside)) - 0.5) * 2 * radius_x
-            y[outside] = (np.random.rand(len(outside)) - 0.5) * 2 * radius_y
-            z[outside] = np.random.rand(len(outside)) * (z_max - z_min) + z_min
-            outside = np.where((x / radius_x)**2 + (y / radius_y)**2 > 1)[0]
+        def _sample(n):
+            xi = np.random.uniform(x_lo, x_hi, n)
+            y_lim = radius_y * np.sqrt(np.maximum(0.0, 1.0 - (xi / radius_x) ** 2))
+            yi = (np.random.rand(n) * 2.0 - 1.0) * y_lim
+            zi = np.random.rand(n) * (z_max - z_min) + z_min
+            return xi, yi, zi
 
+        x, y, z = _sample(N)
         too_close = np.where(self.calc_min_cell_interdist(x, y, z) < min_cell_interdist)[0]
         while len(too_close):
-            x[too_close] = (np.random.rand(len(too_close)) - 0.5) * 2 * radius_x
-            y[too_close] = (np.random.rand(len(too_close)) - 0.5) * 2 * radius_y
-            z[too_close] = np.random.rand(len(too_close)) * (z_max - z_min) + z_min
-            outside = np.where((x / radius_x)**2 + (y / radius_y)**2 > 1)[0]
-            while len(outside):
-                x[outside] = (np.random.rand(len(outside)) - 0.5) * 2 * radius_x
-                y[outside] = (np.random.rand(len(outside)) - 0.5) * 2 * radius_y
-                z[outside] = np.random.rand(len(outside)) * (z_max - z_min) + z_min
-                outside = np.where((x / radius_x)**2 + (y / radius_y)**2 > 1)[0]
+            xr, yr, zr = _sample(len(too_close))
+            x[too_close], y[too_close], z[too_close] = xr, yr, zr
             too_close = np.where(self.calc_min_cell_interdist(x, y, z) < min_cell_interdist)[0]
 
-        # Tonotopy: sort by x (rostrocaudal axis, Fischl et al. 2016)
         soma_pos = [{'x': x[i], 'y': y[i], 'z': z[i]} for i in range(N)]
         soma_pos.sort(key=lambda p: p['x'])
         return soma_pos
@@ -250,10 +272,20 @@ def main():
                         help='Monaural condition: remove contralateral SBC (silences medial dendrite)')
     parser.add_argument('--hoc-file', type=str, default=None, dest='hoc_file',
                         help='HOC morphology file (default: MSO_models/mso_model.hoc)')
+    parser.add_argument('--mso-freq-min', type=float, default=MSO_FREQ_MIN, dest='mso_freq_min',
+                        help=f'Lower CF bound for MSO input band in Hz (default: {MSO_FREQ_MIN})')
+    parser.add_argument('--mso-freq-max', type=float, default=MSO_FREQ_MAX, dest='mso_freq_max',
+                        help=f'Upper CF bound for MSO input band in Hz (default: {MSO_FREQ_MAX})')
     args = parser.parse_args()
 
     if args.hoc_file is None:
         args.hoc_file = HOC_FILE
+
+    mso_idx_lo = mso_freq_to_idx(args.mso_freq_min)
+    mso_idx_hi = mso_freq_to_idx(args.mso_freq_max)
+    if RANK == 0:
+        print(f'[MSO band] {args.mso_freq_min:.0f}–{args.mso_freq_max:.0f} Hz '
+              f'→ idx [{mso_idx_lo}, {mso_idx_hi}] / {N_MSO_TOTAL}')
 
     side        = args.side
     contra_side = 'R' if side == 'L' else 'L'
@@ -272,8 +304,8 @@ def main():
     X_pops = [f'SBC_{contra_side}', f'SBC_{side}',
               f'MNTBC_{side}', f'LNTBC_{side}']
     k_yxl_local = [
-        [3, 0, 0, 0],   # medial dendrite:  3×SBC_contra
-        [0, 3, 0, 0],   # lateral dendrite: 3×SBC_ipsi
+        [6, 0, 0, 0],   # medial dendrite:  3×SBC_contra
+        [0, 6, 0, 0],   # lateral dendrite: 3×SBC_ipsi
         [0, 0, 2, 1],   # soma:             2×MNTBC + 1×LNTBC
     ]
     if args.monaural:
@@ -290,8 +322,11 @@ def main():
                               f'spikes_{stem}_angle{args.angle}_{side}')
     cond_tag   = '_monaural' if args.monaural else ''
     hoc_tag    = '_active' if args.hoc_file != HOC_FILE else ''
+    freq_tag   = (f'_f{int(args.mso_freq_min)}-{int(args.mso_freq_max)}Hz'
+                  if (args.mso_freq_min != MSO_FREQ_MIN or args.mso_freq_max != MSO_FREQ_MAX)
+                  else '')
     output_dir = os.path.join(REPO_ROOT, 'RESULTS', 'lfp_tmp',
-                              f'output_{stem}_angle{args.angle}_{side}{cond_tag}{hoc_tag}')
+                              f'output_{stem}_angle{args.angle}_{side}{cond_tag}{hoc_tag}{freq_tag}')
     for sub in ('cells', 'figures', 'populations'):
         os.makedirs(os.path.join(output_dir, sub), exist_ok=True)
 
@@ -316,6 +351,8 @@ def main():
     #_r_um  = (_V_um3 / (2 * np.pi)) ** (1 / 3)
     pop = MSOPopulation(
         n_syn_per_pop=n_syn_per_pop,
+        mso_idx_lo=mso_idx_lo,
+        mso_idx_hi=mso_idx_hi,
         y=pop_label,
         cellParams={
             'morphology': args.hoc_file, 'passive': False, 'v_init': V_INIT,
@@ -328,7 +365,7 @@ def main():
             'radius':   ELLIPSE_RADIUS_Y,   # bounding value required by parent __init__
             'radius_x': ELLIPSE_RADIUS_X,
             'radius_y': ELLIPSE_RADIUS_Y,
-            'z_min': 0.0, 'z_max': 0.0, 'min_cell_interdist': 1.0,
+            'z_min': -100.0, 'z_max': 100.0, 'min_cell_interdist': 1.0,
             'min_r': np.array([[0.], [0.]]),
         },
         layerBoundaries=LAYER_BOUNDARIES,
