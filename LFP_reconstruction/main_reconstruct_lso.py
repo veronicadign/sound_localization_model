@@ -26,14 +26,12 @@ Outputs saved to RESULTS/lfp_tmp/output_lso_{stem}_angle{ANGLE}_{SIDE}/figures/:
 """
 
 import os
-import re
 import sys
 import random
 
 import numpy as np
 import h5py
 
-import LFPy
 import neuron
 import lfpykit.models as lfpykit_models
 import hybridLFPy
@@ -48,6 +46,9 @@ RANK = COMM.Get_rank()
 # ---------------------------------------------------------------------------
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOC_FILE  = os.path.join(REPO_ROOT, 'MSO_models', 'lso_model_active.hoc')
+# Extended-axon morphology for the SPIKING driver (--drive spiking): soma+dends
+# of lso_model_active.hoc + ~4 mm ascending-LL active axon (build_lso_axon.py).
+HOC_FILE_AXON = os.path.join(REPO_ROOT, 'MSO_models', 'lso_model_active_axon.hoc')
 try:
     neuron.load_mechanisms(os.path.join(REPO_ROOT, 'MSO_models'))
 except RuntimeError as _e:
@@ -61,50 +62,46 @@ DT     = 0.026   # ms
 TSTOP  = 50.0    # ms
 V_INIT = -63.0   # mV  (E_L.LSO from params.py)
 
-N_CELLS       = 100     # default
 N_LSO_TOTAL   = 5600   # LSO neurons per side in NEST sim
-N_SBC_TOTAL   = 28000  # SBC neurons per side (presynaptic)
-N_MNTBC_TOTAL = 3600   # MNTBC neurons per side (presynaptic)
 
 # ---------------------------------------------------------------------------
-# LSO elliptic cylinder geometry (smaller than MSO)
-# Helfert & Schwartz 1987 gerbil: LSO ~1 mm rostrocaudal, ~0.5 mm dorsoventral
+# LSO nucleus geometry — HUMAN dims, anatomically reoriented (Addendum A).
+# Model axes: x=dorsoventral, y=rostrocaudal, z=mediolateral.
+#   HEIGHT along y (rostrocaudal) = 2800 um (the LSO long axis);
+#   elliptic cross-section in the x-z plane:
+#     x (dorsoventral) semi-axis 400 um,  z (mediolateral / TONOTOPIC) semi-axis 600 um.
+# Tonotopy runs mediolaterally (z): lateral = low CF, medial = high CF.
 # ---------------------------------------------------------------------------
-ELLIPSE_RADIUS_X = 250.0   # um  dorsoventral / tonotopic half-axis
-ELLIPSE_RADIUS_Y = 500.0   # um  rostrocaudal half-axis
+HALF_HEIGHT_Y = 1400.0   # um  rostrocaudal half-height (full 2800 um)
+RADIUS_X      = 400.0    # um  dorsoventral semi-axis
+RADIUS_Z      = 600.0    # um  mediolateral / tonotopic semi-axis
+# Back-compat aliases (populationParams keys only; draw_rand_pos below uses the
+# constants above directly, so the passed radius_x/radius_y are not authoritative).
+ELLIPSE_RADIUS_X = RADIUS_X
+ELLIPSE_RADIUS_Y = RADIUS_Z
 
 # ---------------------------------------------------------------------------
 # Probe geometry  (same layout as MSO script)
 # ---------------------------------------------------------------------------
 N_CH    = 16
-PROBE_Z = np.linspace(-400, 400, N_CH)   # um
+PROBE_Z = np.linspace(-500, 500, N_CH)   # um  (brackets the +-413.5 um dendrite tips)
 PROBE_X = np.zeros(N_CH)
 PROBE_Y = np.zeros(N_CH)
 SIGMA   = 0.3   # S/m
 
 # ---------------------------------------------------------------------------
-# Layer boundaries (z-axis, matching lso_model_active.hoc)
-#   Layer 0: dend_A  (+z)
-#   Layer 1: dend_B  (-z)
-#   Layer 2: soma / dend_C (z ~ 0)
+# Layer boundaries — SINGLE all-encompassing layer.
+#
+# hybridLFPy assigns synapses by ABSOLUTE z (a cortical-depth model) AFTER the cell
+# is positioned. Since the reoriented nucleus distributes somas along z (tonotopic,
+# +-RADIUS_Z), a narrow per-structure z-layer would miss most cells (get_idx -> empty
+# -> no synapse -> no drive). We don't need z-layers: insert_all_synapses places every
+# synapse by SECTION NAME (SBC->dendrites, MNTBC->soma, spiking driver->AIS), so one
+# layer spanning all z works for any soma position. k_yXL is therefore single-row.
 # ---------------------------------------------------------------------------
 LAYER_BOUNDARIES = [
-    [  7.5,  157.5],   # dend_A
-    [-157.5,  -7.5],   # dend_B
-    [  -7.5,    7.5],  # soma (+ dend_C at z=0)
+    [-1.0e4, 1.0e4],
 ]
-
-# k_yXL[layer][pop]: number of synapses per presynaptic neuron per layer
-#   SBC_ipsi:  20 on dend_A + 20 on dend_B = 40 total (params.py SBCs2LSOs=40)
-#   MNTBC_ipsi: 8 on soma                            (params.py MNTBCs2LSOs=8)
-K_YXL = [
-    [20, 0],   # dend_A: SBC only
-    [20, 0],   # dend_B: SBC only
-    [ 0, 8],   # soma:   MNTBC only
-]
-
-SYN_DELAY_LOC   = [2.0, 2.0, 1.0]   # SBC delay=2ms, MNTBC delay=1ms (params.py)
-SYN_DELAY_SCALE = [None, None, None]
 
 
 # ---------------------------------------------------------------------------
@@ -116,16 +113,16 @@ class LSOPopulation(Population):
     PER_POP_SYN = {
         'SBC': {
             'syntype': 'Exp2Syn',
-            'tau1':    0.5,    # ms  TAUS_EX_RISE.LSO
-            'tau2':    1.0,    # ms  TAUS_EX_DECAY.LSO
+            'tau1':    0.2,    # ms  TAUS_EX_RISE.LSO
+            'tau2':    0.5,    # ms  TAUS_EX_DECAY.LSO
             'e':       0.0,    # mV  EXC_REV.LSO
             'weight':  0.040,  # uS
         },
         'MNTBC': {
             'syntype': 'Exp2Syn',
-            'tau1':    0.15,   # ms  TAUS_IN_RISE.LSO
-            'tau2':    0.7,    # ms  TAUS_IN_DECAY.LSO
-            'e':      -75.0,   # mV  INH_REV.LSO
+            'tau1':    0.2,    # ms  TAUS_IN_RISE.LSO
+            'tau2':    0.5,    # ms  TAUS_IN_DECAY.LSO
+            'e':      -90.0,   # mV  INH_REV.LSO
             'weight':  0.020,  # uS
         },
     }
@@ -215,37 +212,95 @@ class LSOPopulation(Population):
                     synDelays=synDelays,
                 )
 
-    def draw_rand_pos(self, radius_x=ELLIPSE_RADIUS_X, radius_y=ELLIPSE_RADIUS_Y,
-                      z_min=0.0, z_max=0.0, min_cell_interdist=1.0, **kwargs):
-        """Uniform sampling inside LSO elliptic cylinder."""
+    def draw_rand_pos(self, min_cell_interdist=1.0, **kwargs):
+        """Uniform sampling in the reoriented LSO nucleus (Addendum A): HEIGHT along
+        y (rostrocaudal, +-HALF_HEIGHT_Y), elliptic cross-section in the x-z plane
+        (semi-axes RADIUS_X dorsoventral, RADIUS_Z mediolateral). The passed
+        radius_x/radius_y/z_min/z_max are ignored — geometry comes from the module
+        constants. Somas are sorted mediolaterally (z) so the tonotopic assignment
+        in get_all_SpCells runs lateral -> medial = low -> high CF."""
         N = self.POPULATION_SIZE
-        x = (np.random.rand(N) - 0.5) * 2 * radius_x
-        y = (np.random.rand(N) - 0.5) * 2 * radius_y
-        z = np.random.rand(N) * (z_max - z_min) + z_min
 
-        outside = np.where((x / radius_x)**2 + (y / radius_y)**2 > 1)[0]
-        while len(outside):
-            x[outside] = (np.random.rand(len(outside)) - 0.5) * 2 * radius_x
-            y[outside] = (np.random.rand(len(outside)) - 0.5) * 2 * radius_y
-            z[outside] = np.random.rand(len(outside)) * (z_max - z_min) + z_min
-            outside = np.where((x / radius_x)**2 + (y / radius_y)**2 > 1)[0]
+        def _sample(m):
+            xx = (np.random.rand(m) - 0.5) * 2 * RADIUS_X
+            zz = (np.random.rand(m) - 0.5) * 2 * RADIUS_Z
+            yy = (np.random.rand(m) - 0.5) * 2 * HALF_HEIGHT_Y
+            return xx, yy, zz
+
+        def _outside(xx, zz):
+            return np.where((xx / RADIUS_X)**2 + (zz / RADIUS_Z)**2 > 1)[0]
+
+        x, y, z = _sample(N)
+        out = _outside(x, z)
+        while len(out):
+            x[out], y[out], z[out] = _sample(len(out))
+            out = _outside(x, z)
 
         too_close = np.where(self.calc_min_cell_interdist(x, y, z) < min_cell_interdist)[0]
         while len(too_close):
-            x[too_close] = (np.random.rand(len(too_close)) - 0.5) * 2 * radius_x
-            y[too_close] = (np.random.rand(len(too_close)) - 0.5) * 2 * radius_y
-            z[too_close] = np.random.rand(len(too_close)) * (z_max - z_min) + z_min
-            outside = np.where((x / radius_x)**2 + (y / radius_y)**2 > 1)[0]
-            while len(outside):
-                x[outside] = (np.random.rand(len(outside)) - 0.5) * 2 * radius_x
-                y[outside] = (np.random.rand(len(outside)) - 0.5) * 2 * radius_y
-                z[outside] = np.random.rand(len(outside)) * (z_max - z_min) + z_min
-                outside = np.where((x / radius_x)**2 + (y / radius_y)**2 > 1)[0]
+            x[too_close], y[too_close], z[too_close] = _sample(len(too_close))
+            out = _outside(x, z)
+            while len(out):
+                x[out], y[out], z[out] = _sample(len(out))
+                out = _outside(x, z)
             too_close = np.where(self.calc_min_cell_interdist(x, y, z) < min_cell_interdist)[0]
 
         soma_pos = [{'x': x[i], 'y': y[i], 'z': z[i]} for i in range(N)]
-        soma_pos.sort(key=lambda p: p['x'])   # sort tonotopically (x = dorsoventral)
+        soma_pos.sort(key=lambda p: p['z'])   # tonotopic along z (mediolateral)
         return soma_pos
+
+
+# ---------------------------------------------------------------------------
+# LSOSpikingPopulation — the SPIKING-output driver (Tolnai-BIC generator)
+#
+# Instead of integrating SBC/MNTBC synaptic currents, each cell is driven by its
+# OWN NEST LSO output train (X = LSO_{side}) through a single SUPRATHRESHOLD
+# synapse on the AIS, so it fires one AP per spike; the AP propagates up the
+# ~4 mm ascending-LL active axon (lso_model_active_axon.hoc) as a travelling-wave
+# current dipole — the integrated spiking output the scalp BIC reflects. Mirrors
+# the calyx suprathreshold-drive pattern (main_reconstruct_calyx.CalyxPopulation).
+# Reuses LSOPopulation.get_all_SpCells (tonotopic 1-source window) and draw_rand_pos.
+# ---------------------------------------------------------------------------
+class LSOSpikingPopulation(LSOPopulation):
+    """LSO driven suprathreshold by its own output train -> axonal travelling wave."""
+
+    PER_POP_SYN = {
+        'LSO': {
+            'syntype': 'Exp2Syn',
+            'tau1':    0.1,    # ms  fast AMPA-like rise
+            'tau2':    0.2,    # ms  fast decay -> a single AP per input
+            'e':       0.0,    # mV
+            'weight':  0.30,   # uS  suprathreshold (single-cell rheobase ~6 nA)
+        },
+    }
+
+    def insert_all_synapses(self, cellindex, cell):
+        # Single suprathreshold synapse on the AIS (falls back to soma). Firing the
+        # AIS both initiates the AP and seeds the saltatory volley up the axon.
+        drive_segs = cell.get_idx('ais')
+        if len(drive_segs) == 0:
+            drive_segs = cell.get_idx('soma')
+
+        for X in self.X:
+            pop_type = X.rsplit('_', 1)[0]   # 'LSO'
+            for j in range(len(self.synIdx[cellindex][X])):
+                idx = self.synIdx[cellindex][X][j]
+                synDelays = (self.synDelays[cellindex][X][j]
+                             if self.synDelays is not None else None)
+                if len(idx) == 0:
+                    continue
+                if len(drive_segs) > 0:
+                    idx = np.random.choice(drive_segs, size=len(idx),
+                                           replace=True).astype('int32')
+                self.insert_synapses(
+                    cell=cell,
+                    cellindex=cellindex,
+                    synParams=self.PER_POP_SYN[pop_type].copy(),
+                    idx=idx,
+                    X=X,
+                    SpCell=self.SpCells[cellindex][X][j],
+                    synDelays=synDelays,
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -257,11 +312,22 @@ def main():
     parser.add_argument('--pic-file', type=str,  default=None, dest='pic_file')
     parser.add_argument('--angle',    type=int,  default=0)
     parser.add_argument('--side',     type=str,  default='L', choices=['L', 'R'])
-    parser.add_argument('--n-cells',  type=int,  default=N_CELLS, dest='n_cells')
+    parser.add_argument('--n-cells',  type=int,  default=N_LSO_TOTAL, dest='n_cells')
     parser.add_argument('--n-single', type=int,  default=5,  dest='n_single')
     parser.add_argument('--condition', type=str, default='binaural',
                         choices=['binaural', 'ipsilateral', 'contralateral'],
                         help='binaural=both; ipsilateral=silence MNTBC; contralateral=silence SBC')
+    parser.add_argument('--drive', type=str, default='synaptic',
+                        choices=['synaptic', 'spiking'],
+                        help='synaptic=integrate SBC/MNTBC currents (near-field LFP, '
+                             'default); spiking=drive the LSO output train up the '
+                             'extended active axon (travelling-wave dipole, BIC generator)')
+    parser.add_argument('--itd-us', type=float, default=None, dest='itd_us',
+                        help='Select an artificial-ITD condition (µs). Overrides '
+                             '--angle; pic key looked up in seconds (µs*1e-6).')
+    parser.add_argument('--ild-db', type=float, default=None, dest='ild_db',
+                        help='Select an artificial-ILD condition (dB). Overrides '
+                             '--itd-us/--angle; pic key looked up in dB.')
     args = parser.parse_args()
 
     side = args.side
@@ -269,39 +335,67 @@ def main():
     pic_file = args.pic_file or os.path.join(REPO_ROOT, 'RESULTS',
                                               'baseline_simulation.pic')
 
+    # Stimulus-condition key: --ild-db > --itd-us > --angle (default 0). Same
+    # convention as main_reconstruct.py / main_abr.py::_condition.
+    if args.ild_db is not None:
+        cond_val, cond_label = float(args.ild_db), f'ild{args.ild_db:g}dB'
+    elif args.itd_us is not None:
+        cond_val, cond_label = args.itd_us * 1e-6, f'itd{args.itd_us:g}us'
+    else:
+        cond_val, cond_label = args.angle, f'angle{args.angle}'
+
     # Reuse the same spikes directory as the MSO script (same pops extracted)
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from main_reconstruct import _pic_stem, _extract_spikes
 
     if RANK == 0:
-        meta = _extract_spikes(args.angle, side, pic_file=pic_file)
+        meta = _extract_spikes(cond_val, side, pic_file=pic_file)
     else:
         meta = None
     meta = COMM.bcast(meta, root=0)
     COMM.Barrier()
 
-    X_pops = [f'SBC_{side}', f'MNTBC_{side}']
+    if args.drive == 'spiking':
+        # Drive each cell suprathreshold from its OWN LSO output train up the
+        # extended active axon (travelling-wave dipole). One synapse on the AIS
+        # (soma layer, k row 2); insert_all_synapses reassigns it to the AIS.
+        pop_class     = LSOSpikingPopulation
+        hoc_file      = HOC_FILE_AXON
+        rot_axis      = []   # no rotation -> coherent rostro-dorsal volley (axon is
+                             #                off-principal-axis, so any spin decoheres it)
+        X_pops        = [f'LSO_{side}']
+        k_yxl_local   = [[1]]              # 1 synapse (single layer) -> AIS via override
+        syn0          = LSOSpikingPopulation.PER_POP_SYN['LSO']
+        j_yx_local    = [syn0['weight']]
+        tau_yx_local  = [syn0['tau2']]
+        syn_delay_loc = [0.05]
+        syn_delay_scale = [None]
+    else:
+        pop_class     = LSOPopulation
+        hoc_file      = HOC_FILE
+        rot_axis      = ['z']
+        X_pops = [f'SBC_{side}', f'MNTBC_{side}']
 
-    k_yxl_local = [
-        [20, 0],   # dend_A: SBC
-        [20, 0],   # dend_B: SBC
-        [ 0, 8],   # soma:   MNTBC
-    ]
-    if args.condition == 'ipsilateral':
-        k_yxl_local = [[row[0], 0] for row in k_yxl_local]
-    elif args.condition == 'contralateral':
-        k_yxl_local = [[0, row[1]] for row in k_yxl_local]
-    j_yx_local      = [0.040, 0.020]
-    tau_yx_local    = [1.0,   0.7  ]
-    syn_delay_loc   = [2.0,   1.0  ]
-    syn_delay_scale = [None,  None  ]
+        # Single layer: 40 SBC (-> dendrites) + 8 MNTBC (-> soma), placed by the
+        # section-name override in LSOPopulation.insert_all_synapses.
+        k_yxl_local = [[40, 8]]
+        if args.condition == 'ipsilateral':
+            k_yxl_local = [[40, 0]]        # silence MNTBC (contra inhibition)
+        elif args.condition == 'contralateral':
+            k_yxl_local = [[0, 8]]         # silence SBC (ipsi excitation)
+        j_yx_local      = [0.040, 0.020]
+        tau_yx_local    = [1.0,   0.7  ]
+        # params.py SYN_DELAYS: SBCs2LSO=2.0, MNTBCs2LSO=0.78
+        syn_delay_loc   = [2.0,   0.78 ]
+        syn_delay_scale = [None,  None  ]
 
     stem       = _pic_stem(pic_file)
     spikes_dir = os.path.join(REPO_ROOT, 'RESULTS', 'lfp_tmp',
-                              f'spikes_{stem}_angle{args.angle}_{side}')
+                              f'spikes_{stem}_angle{cond_val}_{side}')
     cond_tag   = '' if args.condition == 'binaural' else f'_cond_{args.condition}'
+    drive_tag  = '_spiking' if args.drive == 'spiking' else ''
     output_dir = os.path.join(REPO_ROOT, 'RESULTS', 'lfp_tmp',
-                              f'output_lso_{stem}_angle{args.angle}_{side}{cond_tag}')
+                              f'output_lso_{stem}_{cond_label}_{side}{cond_tag}{drive_tag}')
     for sub in ('cells', 'figures', 'populations'):
         os.makedirs(os.path.join(output_dir, sub), exist_ok=True)
 
@@ -319,14 +413,14 @@ def main():
         cell=None, x=PROBE_X, y=PROBE_Y, z=PROBE_Z, sigma=SIGMA,
     )
     pop_label = f'LSO_{side}'
-    pop = LSOPopulation(
+    pop = pop_class(
         n_syn_per_pop=n_syn_per_pop,
         y=pop_label,
         cellParams={
-            'morphology': HOC_FILE, 'passive': False, 'v_init': V_INIT,
+            'morphology': hoc_file, 'passive': False, 'v_init': V_INIT,
             'dt': DT, 'tstart': 0., 'tstop': TSTOP, 'nsegs_method': None,
         },
-        rand_rot_axis=['z'],
+        rand_rot_axis=rot_axis,
         simulationParams={'rec_imem': True},
         populationParams={
             'number':   args.n_cells,

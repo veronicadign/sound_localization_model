@@ -26,7 +26,6 @@ import sys
 import numpy as np
 import h5py
 
-import LFPy
 import neuron
 import lfpykit.models as lfpykit_models
 import hybridLFPy
@@ -55,10 +54,9 @@ META_FILE  = os.path.join(SPIKES_DIR, 'metadata.json')
 # ---------------------------------------------------------------------------
 DT           = 0.026   # ms #0.0625 0.026
 TSTOP        = 50.0     # ms
-V_INIT       = -57.0    # mV  (E_L.MSO) -57
+V_INIT       = -51.0    # mV  (E_L.MSO)
 N_CELLS           = 15500    # default representative cell count
 N_MSO_TOTAL       = 15500   # MSO neurons per side in NEST sim (params.py POP_NUM.MSO)
-MSO_DENSITY_MM3   = 13049.0 # human MSO packing density (neurons/mm³)
 
 # ---------------------------------------------------------------------------
 # MSO frequency band (ERB-scale tonotopic mapping)
@@ -99,13 +97,6 @@ LAYER_BOUNDARIES = [
     [-160., -10.],   # lateral dendrite
     [ -10.,  10.],   # soma
 ]
-K_YXL = [
-    [2, 0, 0],
-    [1, 0, 0],
-    [0, 2, 1],
-]
-SYN_DELAY_LOC   = [2.0, 1.0, 1.0] #[2.0, 1.65, 1.65]
-SYN_DELAY_SCALE = [None, None, None]
 
 
 # ---------------------------------------------------------------------------
@@ -117,24 +108,24 @@ class MSOPopulation(Population):
     PER_POP_SYN = {
         'SBC': {
             'syntype': 'Exp2Syn',
-            'tau1':    0.15,    # ms  (TAUS_EX_RISE.MSO)
-            'tau2':    0.3,     #0.3 ms  (TAUS_EX_DECAY.MSO) try 0.2
+            'tau1':    0.2,     # ms  (TAUS_EX_RISE.MSO)
+            'tau2':    0.5,     # ms  (TAUS_EX_DECAY.MSO)
             'e':       0.0,     # mV  excitatory reversal
             'weight':  0.055,   # 0.012 μS = 12 nS
         },
         'MNTBC': {
             'syntype': 'Exp2Syn',
-            'tau1':    0.15,    #0.15 ms  (TAUS_IN_RISE.MSO) try 0.4
-            'tau2':    0.7,     #0.7 ms  (TAUS_IN_DECAY.MSO) try 2
-            'e':      -75.0,    # mV  inhibitory reversal
+            'tau1':    0.2,     # ms  (TAUS_IN_RISE.MSO)
+            'tau2':    0.5,     # ms  (TAUS_IN_DECAY.MSO)
+            'e':      -70.0,    # mV  inhibitory reversal (INH_REV.MSO)
             'weight':  0.025,   # μS = 10 nS 0.010
         },
         'LNTBC': {
             'syntype': 'Exp2Syn',
-            'tau1':    0.15,
-            'tau2':    0.7,     #0.7 ms  (TAUS_IN_DECAY.MSO) try 0.4
-            'e':      -75.0,
-            'weight':  0.000,
+            'tau1':    0.2,
+            'tau2':    0.5,     # ms  (TAUS_IN_DECAY.MSO)
+            'e':      -70.0,
+            'weight':  0.025,
         },
     }
 
@@ -268,8 +259,18 @@ def main():
                         help=f'Number of MSO cells (default: {N_CELLS})')
     parser.add_argument('--n-single', type=int,  default=5, dest='n_single',
                         help='Number of single-cell contribution plots (default: 5)')
-    parser.add_argument('--monaural', action='store_true', default=False,
-                        help='Monaural condition: remove contralateral SBC (silences medial dendrite)')
+    parser.add_argument('--condition', type=str, default='binaural',
+                        choices=['binaural', 'ipsilateral', 'contralateral'],
+                        help='binaural=both ears; ipsilateral=ipsi-ear inputs only '
+                             '(silence contra SBC medial dend + MNTBC); contralateral='
+                             'contra-ear inputs only (silence ipsi SBC lateral dend + '
+                             'LNTBC). Mirrors main_reconstruct_lso and main_abr.py.')
+    parser.add_argument('--itd-us', type=float, default=None, dest='itd_us',
+                        help='Select an artificial-ITD condition (µs). Overrides '
+                             '--angle; pic key looked up in seconds (µs*1e-6).')
+    parser.add_argument('--ild-db', type=float, default=None, dest='ild_db',
+                        help='Select an artificial-ILD condition (dB). Overrides '
+                             '--itd-us/--angle; pic key looked up in dB.')
     parser.add_argument('--hoc-file', type=str, default=None, dest='hoc_file',
                         help='HOC morphology file (default: MSO_models/mso_model.hoc)')
     parser.add_argument('--mso-freq-min', type=float, default=MSO_FREQ_MIN, dest='mso_freq_min',
@@ -290,43 +291,59 @@ def main():
     side        = args.side
     contra_side = 'R' if side == 'L' else 'L'
 
+    # Stimulus-condition key: --ild-db > --itd-us > --angle (default 0). The pic key
+    # is the raw value (seconds for ITD, dB for ILD, int for angle); the readable
+    # label goes into the output dir. Same convention as main_abr.py::_condition.
+    if args.ild_db is not None:
+        cond_val, cond_label = float(args.ild_db), f'ild{args.ild_db:g}dB'
+    elif args.itd_us is not None:
+        cond_val, cond_label = args.itd_us * 1e-6, f'itd{args.itd_us:g}us'
+    else:
+        cond_val, cond_label = args.angle, f'angle{args.angle}'
+
     # Spike extraction on rank 0 only; broadcast metadata to all ranks
     if RANK == 0:
-        meta = _extract_spikes(args.angle, side, pic_file=args.pic_file)
+        meta = _extract_spikes(cond_val, side, pic_file=args.pic_file)
     else:
         meta = None
     meta = COMM.bcast(meta, root=0)
     COMM.Barrier()
 
     # MSO anatomy: medial dendrite ← contra SBC, lateral dendrite ← ipsi SBC
-    # (Cant & Hyson 1992; Joris et al. 1998)
-    # Monaural condition removes contra SBC (zeroes medial dendrite row).
+    # (Cant & Hyson 1992; Joris et al. 1998). MNTBC = contra-ear-driven inhibition,
+    # LNTBC = ipsi-ear-driven inhibition. Ear-specific conditions silence the inputs
+    # driven by the absent ear (same partition as main_abr.py::_side_condition).
     X_pops = [f'SBC_{contra_side}', f'SBC_{side}',
               f'MNTBC_{side}', f'LNTBC_{side}']
     k_yxl_local = [
-        [6, 0, 0, 0],   # medial dendrite:  3×SBC_contra
-        [0, 6, 0, 0],   # lateral dendrite: 3×SBC_ipsi
+        [6, 0, 0, 0],   # medial dendrite:  6×SBC_contra
+        [0, 6, 0, 0],   # lateral dendrite: 6×SBC_ipsi
         [0, 0, 2, 1],   # soma:             2×MNTBC + 1×LNTBC
     ]
-    if args.monaural:
-        k_yxl_local[1] = [0, 0, 0, 0]   # no contra SBC → silence medial dendrite
+    if args.condition == 'ipsilateral':        # ipsi ear only
+        k_yxl_local[0] = [0, 0, 0, 0]          # silence contra SBC (medial dendrite)
+        k_yxl_local[2] = [0, 0, 0, 1]          # drop MNTBC (contra inhib), keep LNTBC
+    elif args.condition == 'contralateral':    # contra ear only
+        k_yxl_local[1] = [0, 0, 0, 0]          # silence ipsi SBC (lateral dendrite)
+        k_yxl_local[2] = [0, 0, 2, 0]          # drop LNTBC (ipsi inhib), keep MNTBC
     j_yx_local      = [0.012, 0.012, 0.010, 0.010]
     tau_yx_local    = [0.2,   0.2,   0.4,   0.4  ]
-    syn_delay_loc   = [2.0,   2.0,   1.0,   1.0  ]
+    # params.py SYN_DELAYS: SBCs2MSOcontra/ipsi=2.0, MNTBCs2MSO=0.78, LNTBCs2MSO=0.465
+    syn_delay_loc   = [2.0,   2.0,   0.78,  0.465]
     syn_delay_scale = [None,  None,  None,  None  ]
 
     pic_file   = args.pic_file or os.path.join(REPO_ROOT, 'RESULTS',
                                                'baseline_simulation.pic')
     stem       = _pic_stem(pic_file)
     spikes_dir = os.path.join(REPO_ROOT, 'RESULTS', 'lfp_tmp',
-                              f'spikes_{stem}_angle{args.angle}_{side}')
-    cond_tag   = '_monaural' if args.monaural else ''
+                              f'spikes_{stem}_angle{cond_val}_{side}')
+    cond_tag   = '' if args.condition == 'binaural' else f'_cond_{args.condition}'
     hoc_tag    = '_active' if args.hoc_file != HOC_FILE else ''
     freq_tag   = (f'_f{int(args.mso_freq_min)}-{int(args.mso_freq_max)}Hz'
                   if (args.mso_freq_min != MSO_FREQ_MIN or args.mso_freq_max != MSO_FREQ_MAX)
                   else '')
     output_dir = os.path.join(REPO_ROOT, 'RESULTS', 'lfp_tmp',
-                              f'output_{stem}_angle{args.angle}_{side}{cond_tag}{hoc_tag}{freq_tag}')
+                              f'output_{stem}_{cond_label}_{side}{cond_tag}{hoc_tag}{freq_tag}')
     for sub in ('cells', 'figures', 'populations'):
         os.makedirs(os.path.join(output_dir, sub), exist_ok=True)
 
@@ -345,10 +362,6 @@ def main():
         cell=None, x=PROBE_X, y=PROBE_Y, z=PROBE_Z, sigma=SIGMA,
     )
     pop_label = f'MSO_{side}'
-    # Cylinder sized to match human MSO packing density (13049 neurons/mm³).
-    # Aspect ratio h = 2r (isotropic): V = 2π r³ → r = (V/2π)^(1/3).
-    _V_um3 = (args.n_cells / MSO_DENSITY_MM3) * 1e9
-    #_r_um  = (_V_um3 / (2 * np.pi)) ** (1 / 3)
     pop = MSOPopulation(
         n_syn_per_pop=n_syn_per_pop,
         mso_idx_lo=mso_idx_lo,
@@ -449,8 +462,12 @@ def _extract_spikes(angle, side, pic_file=None):
     if os.path.exists(meta_path):
         with open(meta_path) as f:
             meta = json.load(f)
-        # Accept cache only if contralateral SBC is present (new format)
-        if f'SBC_{contra_side}' in meta:
+        # Accept cache only if it matches the current extract format: contralateral
+        # SBC + GBC, ipsilateral ANF AND ipsilateral LSO output. Contralateral GBC
+        # is the MNTB calyx drive; LSO_{side} is the spiking-LSO ABR drive —
+        # requiring them forces re-extraction of stale pre-GBC/pre-LSO caches.
+        if (f'SBC_{contra_side}' in meta and f'GBC_{contra_side}' in meta
+                and f'ANF_{side}' in meta and f'LSO_{side}' in meta):
             return meta
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import extract_spikes as _es
@@ -611,11 +628,6 @@ def _plot_single_cells(output_dir, single_contribs, tvec, probe_z,
 
     for i in range(n_cells):
         gid = cell_gids[i]
-        
-        # Calculate the true biological tonotopic index
-        N_mso = 15500 
-        mso_idx = int(round(gid * (N_mso - 1) / (total_sim_cells - 1))) if total_sim_cells > 1 else 0
-
         sx, sy, sz = soma_pos[i]
         d_min = _min_dist(sx, sy, sz)
 

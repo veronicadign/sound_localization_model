@@ -19,7 +19,7 @@ soma {
     cm   = 1.537
     insert pas
     g_pas = 1.537e-3
-    e_pas = -57.0
+    e_pas = -51.0
     insert klt
     gbar_klt = 0.017
     insert ih
@@ -38,7 +38,7 @@ dend_medial {
     cm   = 1.537
     insert pas
     g_pas = 1.537e-3
-    e_pas = -57.0
+    e_pas = -51.0
     insert klt
     gbar_klt = 0.0036
     insert ih
@@ -54,7 +54,7 @@ dend_lateral {
     cm   = 1.537
     insert pas
     g_pas = 1.537e-3
-    e_pas = -57.0
+    e_pas = -51.0
     insert klt
     gbar_klt = 0.0036
     insert ih
@@ -72,7 +72,7 @@ axon {
     cm   = 1.537
     insert pas
     g_pas = 1.537e-3
-    e_pas = -57.0
+    e_pas = -51.0
     insert nax
     gbar_nax = 0.35
     ena = 55.0

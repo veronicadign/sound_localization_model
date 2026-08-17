@@ -30,7 +30,6 @@ Unit conventions (all lfpykit-native, no conversion needed):
 """
 
 import os
-import re
 import sys
 
 import numpy as np
@@ -41,7 +40,6 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from mpi4py import MPI
 
-import LFPy
 import hybridLFPy
 
 COMM = MPI.COMM_WORLD
@@ -55,7 +53,7 @@ HOC_FILE  = os.path.join(REPO_ROOT, 'MSO_models', 'mso_model.hoc')
 
 sys.path.insert(0, os.path.join(REPO_ROOT, 'LFP_reconstruction'))
 from main_reconstruct import (
-    MSOPopulation, N_MSO_TOTAL,
+    MSOPopulation,
     ELLIPSE_RADIUS_X, ELLIPSE_RADIUS_Y,
     LAYER_BOUNDARIES, _pic_stem, _extract_spikes,
 )
@@ -65,7 +63,7 @@ from main_reconstruct import (
 # ---------------------------------------------------------------------------
 DT     = 0.026   # ms
 TSTOP  = 50.0    # ms
-V_INIT = -57.0   # mV
+V_INIT = -51.0   # mV  (E_L.MSO)
 N_CELLS = 15500
 
 # ---------------------------------------------------------------------------
@@ -161,6 +159,23 @@ ROTATION = {
 }
 
 
+def _inh_tag(args):
+    """Directory suffix marking an inhibition-blocked run ('' when inhibition intact)."""
+    return '_noinh' if getattr(args, 'block_inhibition', False) else ''
+
+
+def _block_inhibition():
+    """Zero the MSO inhibitory synaptic weights (MNTBC + LNTBC).
+
+    The conductances that actually reach the cell live in MSOPopulation.PER_POP_SYN,
+    which insert_all_synapses() reads — the J_yX argument does NOT drive them. Note
+    LNTBC is already 0.0 in the model, so MNTBC (contralateral) is the only inhibition
+    genuinely being removed here.
+    """
+    for pop in ('MNTBC', 'LNTBC'):
+        MSOPopulation.PER_POP_SYN[pop]['weight'] = 0.0
+
+
 def _side_condition(condition, side):
     """Return the per-MSO acoustic condition given the stimulated ear and MSO side.
 
@@ -202,18 +217,26 @@ def _run_one_side(side, args, meta):
     elif side_cond == 'ipsilateral':
         k_yxl_local[0] = [0, 0, 0, 0]   # silence medial dend (contra SBC off)
         k_yxl_local[2] = [0, 0, 0, 1]   # silence MNTBC (contra inhibition off)
+    # NOTE: J_yX does NOT set the synapse conductance — MSOPopulation.insert_all_synapses
+    # overrides it with MSOPopulation.PER_POP_SYN[pop]['weight']. See _block_inhibition().
     j_yx_local    = [0.055, 0.055, 0.025, 0.025]
     tau_yx_local  = [0.2,   0.2,   0.4,   0.4  ]
-    syn_delay_loc = [2.0,   2.0,   1.0,   1.0  ]
+    # params.py SYN_DELAYS: SBCs2MSOcontra/ipsi=2.0, MNTBCs2MSO=0.78, LNTBCs2MSO=0.465
+    syn_delay_loc = [2.0,   2.0,   0.78,  0.465]
 
     pic_file   = args.pic_file or os.path.join(REPO_ROOT, 'RESULTS',
                                                'baseline_simulation.pic')
     stem       = _pic_stem(pic_file)
+    cond, cond_label = _condition(args)
+    # spikes_dir keeps the 'angle{cond}' template so it matches the cache dir that
+    # _extract_spikes builds internally (main_reconstruct.py); output_dir uses the
+    # readable cond_label.
     spikes_dir = os.path.join(REPO_ROOT, 'RESULTS', 'lfp_tmp',
-                              f'spikes_{stem}_angle{args.angle}_{side}')
+                              f'spikes_{stem}_angle{cond}_{side}')
     cond_tag   = f'_{args.condition}' if args.condition != 'binaural' else ''
+    inh_tag    = _inh_tag(args)
     output_dir = os.path.join(REPO_ROOT, 'RESULTS', 'abr_tmp',
-                              f'output_{stem}_angle{args.angle}_{side}{cond_tag}')
+                              f'output_{stem}_{cond_label}_{side}{cond_tag}{inh_tag}')
     os.makedirs(os.path.join(output_dir, 'figures'), exist_ok=True)
 
     k_arr         = np.array(k_yxl_local)
@@ -300,7 +323,6 @@ def _project_and_save(side, p_model, output_dir):
     Apply rotation and 4-sphere head model. Returns V_uV (n_e, T) and
     saves population_dipole.h5 and ABR.h5.
     """
-    from lfpykit.eegmegcalc import FourSphereVolumeConductor
 
     # --- Rotate: model axes → head-centred axes ----
     R = ROTATION[side]
@@ -344,7 +366,7 @@ def _apply_head_model(p_head_by_side, output_dir, electrode_names):
         V_side   = fsc.get_dipole_potential(p_head, r_dipole)   # (n_e, T) mV
         V_mV     = V_side if V_mV is None else V_mV + V_side
 
-    V_uV = _bandpass(V_mV * 1e3, hi=3000., lo=150.)  # mV → µV, high-pass 150 Hz
+    V_uV = _bandpass(V_mV * 1e3, hi=1500., lo=100.)  # mV → µV, Tolnai ABR band 100-1500 Hz
 
     # for bandpass filter OFF:
     # V_uV = V_mV * 1e3
@@ -363,17 +385,87 @@ def _apply_head_model(p_head_by_side, output_dir, electrode_names):
 
 
 # ---------------------------------------------------------------------------
+# Standardised per-(generator, side) dipole record — consumed by main_abr_full.py
+# (the cross-nucleus composite).  Purely additive: every producer writes one of
+# these alongside its own ABR.h5 / population_dipole.h5, so the orchestrator can
+# superpose all nuclei WITHOUT re-running any NEURON simulation.  head-frame
+# dipole + its anatomical position are all the 4-sphere model needs.
+# ---------------------------------------------------------------------------
+def dipoles_dir_for(stem, angle):
+    """Shared directory holding every nucleus's dipole records for one stimulus."""
+    return os.path.join(REPO_ROOT, 'RESULTS', 'abr_tmp', 'dipoles',
+                        f'{stem}_angle{angle}')
+
+
+def save_dipole_record(stem, angle, nucleus, generator, side, p_head, r_dipole,
+                       n_total, n_cells, condition='binaural'):
+    """Write one head-frame dipole record.
+
+    Filename encodes the acoustic condition — <nucleus>__<generator>__<side>__
+    <condition>.h5 — so a monaural (left_ear/right_ear) run does NOT overwrite the
+    binaural records for the same stimulus.  AVCN/MNTB have no --condition flag and
+    always write 'binaural' (their per-side dipole is condition-invariant — a given
+    CN/MNTB side is driven by one ear regardless); only MSO/LSO differ by condition.
+    The orchestrator prefers the requested condition and falls back to 'binaural'.
+    """
+    d = dipoles_dir_for(stem, angle)
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, f'{nucleus}__{generator}__{side}__{condition}.h5')
+    with h5py.File(path, 'w') as f:
+        f.create_dataset('p_head',   data=np.asarray(p_head))                 # (3, T) nA·µm
+        f.create_dataset('r_dipole', data=np.asarray(r_dipole, dtype=float))  # (3,) µm
+        f.create_dataset('srate',    data=1.0 / (DT * 1e-3))
+        f.attrs.update(nucleus=nucleus, generator=generator, side=side,
+                       condition=condition, n_total=int(n_total), n_cells=int(n_cells),
+                       stem=str(stem), angle=str(angle),
+                       axes='x=mediolateral, y=anteroposterior, z=inferosuperior',
+                       units='nA·µm')
+    print(f'dipole record saved → {path}')
+    return path
+
+
+def superpose_sources(sources, electrode_names, hi=3000., lo=150.):
+    """4-sphere superposition of head-frame dipoles, each at its OWN position.
+
+    The reusable core shared by the per-nucleus ABRs and the cross-nucleus
+    composite (main_abr_full.py).  `sources` is a list of
+    ``(label, side, p_head (3,T), r_dipole (3,))``; sources sharing a label are
+    summed (e.g. the L and R of one generator).  Because band-pass filtering is
+    linear with a fixed kernel, callers may further sum the returned per-label
+    traces (per-nucleus, composite) — sum-then-filter ≡ filter-then-sum.
+
+    Returns ``(V_by_label, srate)`` with each entry a band-passed (n_e, T) µV
+    array.  A 'composite' key (sum of all labels) is added.
+    """
+    from collections import defaultdict
+    from lfpykit.eegmegcalc import FourSphereVolumeConductor
+
+    r_elec = np.stack([ELECTRODE_POS[e] for e in electrode_names])
+    fsc = FourSphereVolumeConductor(r_electrodes=r_elec, radii=FOUR_SPHERE_RADII,
+                                    sigmas=FOUR_SPHERE_SIGMAS)
+    V_mV = defaultdict(float)
+    for label, _side, p_head, r_dipole in sources:
+        V_mV[label] = V_mV[label] + fsc.get_dipole_potential(
+            np.asarray(p_head, dtype=float), np.asarray(r_dipole, dtype=float))
+
+    srate = 1.0 / (DT * 1e-3)
+    V_by_label, total = {}, 0.0
+    for label, v in V_mV.items():
+        total = total + v
+        V_by_label[label] = _bandpass(v * 1e3, hi=hi, lo=lo)   # mV → µV
+    V_by_label['composite'] = _bandpass(np.asarray(total) * 1e3, hi=hi, lo=lo)
+    return V_by_label, srate
+
+
+# ---------------------------------------------------------------------------
 # Plotting
 # ---------------------------------------------------------------------------
-def _plot_abr(output_dir, V_uV, electrode_names, srate, angle, side, n_cells,
+def _plot_abr(output_dir, V_uV, electrode_names, srate, cond_label, side, n_cells,
               derivation='Cz-M1'):
     import matplotlib.gridspec as gridspec
 
     n_t  = V_uV.shape[1]
     tvec = np.arange(n_t) / srate * 1e3   # ms
-
-    has_cz = 'Cz' in electrode_names
-    has_m1 = 'M1' in electrode_names
 
     fig = plt.figure(figsize=(13, 8), constrained_layout=True)
     gs  = gridspec.GridSpec(2, 2, figure=fig, height_ratios=[1, 1])
@@ -393,7 +485,7 @@ def _plot_abr(output_dir, V_uV, electrode_names, srate, angle, side, n_cells,
         ax.legend(fontsize=9)
 
     _plot_single(ax_cz, 'Cz', 'steelblue',
-                 f'Cz (vertex)  |  angle {angle}°  |  side {side}  |  N={n_cells}')
+                 f'Cz (vertex)  |  {cond_label}  |  side {side}  |  N={n_cells}')
     _plot_single(ax_m1, 'M1', 'firebrick', 'M1 (left mastoid)')
 
     # Compute chosen differential
@@ -428,7 +520,7 @@ def _plot_abr(output_dir, V_uV, electrode_names, srate, angle, side, n_cells,
     ax2.axhline(0, color='k', lw=0.4, ls=':')
     ax2.set_xlabel('Time (ms)')
     ax2.set_ylabel('Amplitude (µV)')
-    ax2.set_title(f'{deriv_label}  |  angle {angle}°  |  side {side}  |  N={n_cells}')
+    ax2.set_title(f'{deriv_label}  |  {cond_label}  |  side {side}  |  N={n_cells}')
     ax2.legend(fontsize=9)
     fig2.suptitle('MSO ABR  |  vertex-positive upward',
                   fontsize=10, fontweight='bold')
@@ -480,11 +572,32 @@ def _plot_phase_cycle_abr(output_dir, V_uV, electrode_names, srate,
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+def _condition(args):
+    """Return (condition_value, label) for key lookup and directory/title naming.
+
+    Without --itd-us: value is the integer angle and label is 'angle{N}', so every
+    derived path and title is IDENTICAL to the pre-ITD behavior. With --itd-us:
+    value is the ITD in seconds (us*1e-6) used for the .pic key lookup, and label
+    is 'itd{us}us' for readable output directories.
+    """
+    if getattr(args, 'ild_db', None) is not None:
+        return float(args.ild_db), f'ild{args.ild_db:g}dB'
+    if getattr(args, 'itd_us', None) is None:
+        return args.angle, f'angle{args.angle}'
+    return args.itd_us * 1e-6, f'itd{args.itd_us:g}us'
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description='MSO ABR reconstruction')
     parser.add_argument('--pic-file',   type=str, default=None, dest='pic_file')
     parser.add_argument('--angle',      type=int, default=0)
+    parser.add_argument('--itd-us',     type=float, default=None, dest='itd_us',
+                        help='Select an artificial-ITD condition (microseconds). '
+                             'Overrides --angle; key looked up in seconds (us*1e-6).')
+    parser.add_argument('--ild-db',     type=float, default=None, dest='ild_db',
+                        help='Select an artificial-ILD condition (dB). Overrides '
+                             '--itd-us/--angle; key looked up in dB.')
     parser.add_argument('--side',       type=str, default='L',
                         choices=['L', 'R', 'both'])
     parser.add_argument('--n-cells',    type=int, default=N_CELLS, dest='n_cells')
@@ -493,7 +606,16 @@ def main():
                         help='Differential derivation to plot (Cz-avg = Cz − mean(M1,M2))')
     parser.add_argument('--condition', type=str, default='binaural',
                         choices=['binaural', 'left_ear', 'right_ear'])
+    parser.add_argument('--block-inhibition', action='store_true',
+                        dest='block_inhibition',
+                        help='Block MSO inhibition: zero the MNTBC and LNTBC synaptic '
+                             'weights. Output goes to a separate *_noinh directory.')
     args = parser.parse_args()
+
+    if args.block_inhibition:
+        _block_inhibition()
+        if RANK == 0:
+            print('[block-inhibition] MSO inhibitory weights (MNTBC, LNTBC) set to 0.0')
 
     sides = ['L', 'R'] if args.side == 'both' else [args.side]
 
@@ -503,7 +625,8 @@ def main():
     for side in sides:
         # Spike extraction on rank 0, broadcast metadata
         if RANK == 0:
-            meta = _extract_spikes(args.angle, side, pic_file=args.pic_file)
+            cond, _ = _condition(args)
+            meta = _extract_spikes(cond, side, pic_file=args.pic_file)
         else:
             meta = None
         meta = COMM.bcast(meta, root=0)
@@ -515,6 +638,11 @@ def main():
         if RANK == 0:
             p_head, _ = _project_and_save(side, global_dipole, output_dir)
             p_head_by_side[side] = p_head
+            _stem = _pic_stem(args.pic_file or os.path.join(
+                REPO_ROOT, 'RESULTS', 'baseline_simulation.pic'))
+            save_dipole_record(_stem, args.angle, 'MSO', 'postsynaptic', side,
+                               p_head, MSO_POS_UM[side], N_CELLS, args.n_cells,
+                               condition=args.condition)
 
     if RANK == 0:
         # For bilateral, create a joint output directory
@@ -522,9 +650,10 @@ def main():
             pic_file = args.pic_file or os.path.join(
                 REPO_ROOT, 'RESULTS', 'baseline_simulation.pic')
             stem = _pic_stem(pic_file)
+            _, cond_label = _condition(args)
             cond_tag = f'_{args.condition}' if args.condition != 'binaural' else ''
             joint_dir = os.path.join(REPO_ROOT, 'RESULTS', 'abr_tmp',
-                                     f'output_{stem}_angle{args.angle}_both{cond_tag}')
+                                     f'output_{stem}_{cond_label}_both{cond_tag}{_inh_tag(args)}')
             os.makedirs(os.path.join(joint_dir, 'figures'), exist_ok=True)
             final_dir = joint_dir
         else:
@@ -535,7 +664,7 @@ def main():
 
         #stim_freq = meta.get('stim_freq_hz')
         _plot_abr(final_dir, V_uV, electrode_names, srate,
-                  args.angle, args.side, args.n_cells, derivation=args.derivation)
+                  _condition(args)[1], args.side, args.n_cells, derivation=args.derivation)
         #_plot_phase_cycle_abr(final_dir, V_uV, electrode_names, srate,
                               #stim_freq, args.angle, args.side, args.n_cells)
 

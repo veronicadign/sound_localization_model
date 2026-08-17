@@ -18,7 +18,10 @@ import numpy as np
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO_ROOT, 'simulate'))
 
-POPS = ['SBC', 'MNTBC', 'LNTBC']
+# Ipsilateral populations extracted for every reconstruction.
+# ANF is the auditory-nerve endbulb drive for the AVCN (GBC) pipeline; MSO/LSO
+# ignore it (they reference only their own X_pops), so the extra GDF is harmless.
+POPS = ['ANF', 'SBC', 'MNTBC', 'LNTBC']
 
 
 def _write_pop(data_side, pop, label, spikes_dir, metadata):
@@ -46,13 +49,34 @@ def _write_pop(data_side, pop, label, spikes_dir, metadata):
     }
 
 
+def _select_condition(angle_map, key):
+    """Pick the condition key from a .pic rate map.
+
+    Exact match first -> preserves ALL existing behavior (integer angles, 0/0.0,
+    and exact float ITD keys): returns the identical sub-dict, so downstream GDF
+    output is byte-identical. Only when the exact key is absent do we fall back to
+    the nearest numeric key within 1e-6 (1 us for ITD-in-seconds), to absorb float
+    representation drift. A genuinely-missing condition raises a clear KeyError.
+    """
+    if key in angle_map:
+        return key
+    numeric = [k for k in angle_map if isinstance(k, (int, float))]
+    if numeric:
+        nearest = min(numeric, key=lambda k: abs(k - key))
+        if abs(nearest - key) <= 1e-6:
+            print(f'[extract] condition {key} not exact; using nearest {nearest}')
+            return nearest
+    raise KeyError(f'condition {key} not found; available: {sorted(angle_map)}')
+
+
 def extract_and_save(pic_file, angle, side, spikes_dir):
     """
     Load pic_file, extract presynaptic spikes for the given angle/side,
     write GDF files and metadata.json to spikes_dir.
 
-    Extracts 4 populations:
-      SBC_{contra_side} — contralateral SBC (medial dendrite input)
+    Extracts:
+      SBC_{contra_side} — contralateral SBC (MSO medial dendrite input)
+      GBC_{contra_side} — contralateral GBC (MNTB calyx-of-Held drive; decussating)
       SBC_{side}        — ipsilateral SBC   (lateral dendrite input)
       MNTBC_{side}      — ipsilateral MNTBC (soma inhibition)
       LNTBC_{side}      — ipsilateral LNTBC (soma inhibition)
@@ -69,8 +93,9 @@ def extract_and_save(pic_file, angle, side, spikes_dir):
         result = dill.load(f, ignore=True)
 
     angle_map   = result.get('angle_to_rate') or result['cue_to_rate']
-    data_ipsi   = angle_map[angle][side]
-    data_contra = angle_map[angle][contra_side]
+    sel         = _select_condition(angle_map, angle)
+    data_ipsi   = angle_map[sel][side]
+    data_contra = angle_map[sel][contra_side]
 
     try:
         stim_freq_hz = float(result['sounds']['base_sound'].frequency)
@@ -85,6 +110,17 @@ def extract_and_save(pic_file, angle, side, spikes_dir):
 
     # Contralateral SBC (lateral dendrite excitation)
     _write_pop(data_contra, 'SBC', f'SBC_{contra_side}', spikes_dir, metadata)
+
+    # Contralateral GBC — calyx-of-Held drive for the MNTB pipeline (the
+    # GBC->MNTB projection decussates, so the ipsilateral MNTB is driven by the
+    # contralateral GBC). MSO/LSO/AVCN ignore this extra GDF.
+    _write_pop(data_contra, 'GBC', f'GBC_{contra_side}', spikes_dir, metadata)
+
+    # Ipsilateral LSO OUTPUT train — the LSO projection-neuron spikes that drive
+    # the spiking-LSO ABR (travelling-wave dipole up the lateral lemniscus). This
+    # is the LSO nucleus's own output, not an input; MSO/AVCN/MNTB ignore it.
+    if 'LSO' in data_ipsi:
+        _write_pop(data_ipsi, 'LSO', f'LSO_{side}', spikes_dir, metadata)
 
     meta_path = os.path.join(spikes_dir, 'metadata.json')
     with open(meta_path, 'w') as f:
