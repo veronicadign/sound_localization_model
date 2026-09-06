@@ -17,7 +17,13 @@ secrets
 results
 .DS_Store
 simulate/jobs/*
-LFP_reconstruction/run_commands.txt
-LFP_reconstruction/report_lfp_reconstruction.tex
-ABR_reconstruction/figures
+reconstruction/LFP_reconstruction/report_lfp_reconstruction.tex
+reconstruction/ABR_reconstruction/figures
+reconstruction/commands.txt
+reconstruction/ABR_reconstruction/plots/tolnai.py
 x86_64
+data/atlases/
+TEMPORARY/
+data/SOFA
+reconstruction/tests/__pycache__
+external/
