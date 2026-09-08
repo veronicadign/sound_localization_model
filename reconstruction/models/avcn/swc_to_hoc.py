@@ -1,44 +1,43 @@
 #!/usr/bin/env python3
 """
-Offline converter: NeuroMorpho SWC  ->  syGlass-style compartmental .hoc.
+Offline converter: NeuroMorpho SWC to syGlass-style compartmental .hoc.
 
-This is a ONE-TIME build tool, not part of the simulation path.  It takes a
-NeuroMorpho reconstruction (SWC: type 1 soma / 2 axon / 3 dendrite) and emits a
-NEURON .hoc in the exact convention used by the figshare EM globular-bushy-cell
-files in models/avcn/morphology/dryad/ (``create sections[N]`` +
-``SectionList`` objects named soma / Axon_Hillock / Axon_Initial_Segment /
-Myelinated_Axon / Proximal_Dendrite / Distal_Dendrite).
+A one-time build tool, not part of the simulation path. It takes a NeuroMorpho
+reconstruction (SWC: type 1 soma, 2 axon, 3 dendrite) and emits a NEURON .hoc
+in the convention used by the figshare EM globular-bushy-cell files in
+models/avcn/morphology/dryad/ (create sections[N] plus SectionList objects
+named soma, Axon_Hillock, Axon_Initial_Segment, Myelinated_Axon,
+Proximal_Dendrite, Distal_Dendrite).
 
-Because those SectionList names are exactly the keys in
-``gbc_biophysics.COMPARTMENT_OF``, the converted cell is decorated by
-``decorate_gbc`` and oriented by ``native_axon_direction`` with **no code
-changes** — it is treated identically to the real EM cells.
+Those SectionList names are exactly the keys in gbc_biophysics.COMPARTMENT_OF,
+so the converted cell is decorated by decorate_gbc and oriented by
+native_axon_direction with no code changes, exactly like the real EM cells.
 
 Geometry source
 ---------------
-The 3-D geometry is taken from NEURON's own ``Import3d`` reader (the same code
-LFPy uses to load SWC), NOT re-derived from the raw SWC points.  This matters:
-Import3d applies SWC-specific handling (3-point spherical soma, diameters at
-branch points) that reproduces NeuroMorpho's reported membrane area, whereas a
-naive point-by-point cylinder reconstruction inflates it by ~1.5x.  We then only
-**re-partition** each imported section into runs of a single compartment class,
-splitting at existing 3-D points — which preserves total area exactly (a split
-at point k duplicates the point but never the frustum).
+The 3-D geometry comes from NEURON's own Import3d reader, the same code LFPy
+uses to load SWC, rather than being re-derived from the raw SWC points. That
+matters: Import3d applies SWC-specific handling (3-point spherical soma,
+diameters at branch points) that reproduces NeuroMorpho's reported membrane
+area, whereas a naive point-by-point cylinder reconstruction inflates it by
+about 1.5x. Each imported section is then only re-partitioned into runs of a
+single compartment class, splitting at existing 3-D points, which preserves
+total area exactly (a split at point k duplicates the point, never the frustum).
 
-Compartment classification (per 3-D point, by SWC type + path distance):
+Compartment classification (per 3-D point, by SWC type and path distance):
 
   type 1 soma  -> soma
-  type 2 axon  path-dist < HILLOCK_UM (3)   -> Axon_Hillock
+  type 2 axon  path-dist < HILLOCK_UM (3)    -> Axon_Hillock
                HILLOCK_UM..AIS_UM (3..30)    -> Axon_Initial_Segment
                > AIS_UM (30)                 -> Myelinated_Axon
   type 3 dend  path-dist <= PROX_UM (40)     -> Proximal_Dendrite
-               > PROX_UM                      -> Distal_Dendrite
+               > PROX_UM                     -> Distal_Dendrite
 
 Thresholds default to values measured on the EM GBC VCN_c09 (hillock 1.8 µm,
-AIS 24 µm, proximal dendrite + hub ~40 µm) and are CLI-overridable.
+AIS 24 µm, proximal dendrite and hub ~40 µm) and can be overridden on the CLI.
 
-The .hoc carries geometry ONLY (pt3dadd) — no insert / gbar / Ra / cm / nseg,
-exactly like the EM files.  All biophysics stays in gbc_biophysics.decorate_gbc.
+The .hoc carries geometry only (pt3dadd), with no insert, gbar, Ra, cm or nseg,
+just like the EM files. All biophysics stays in gbc_biophysics.decorate_gbc.
 
 Usage
 -----
@@ -64,14 +63,14 @@ SL_PROX = 'Proximal_Dendrite'
 SL_DIST = 'Distal_Dendrite'
 SECTIONLIST_NAMES = [SL_SOMA, SL_MYEL, SL_HILL, SL_PROX, SL_DIST, SL_AIS]
 
-# --- Fixed myelinated-axon truncation (SBC) ------------------------------------
-# The spherical bushy cell's long reconstructed axon is decorated near-passive and
-# is NOT used for an axonal traveling-wave dipole (unlike the GBC), yet it is ~60%
-# of the compartments.  We keep only a short proximal stub: the AIS plus this much
-# myelinated axon (µm of path distance beyond the AIS), and drop the rest.  The
-# stub preserves a robust ventromedial orientation reference and the near-soma
-# axonal field; the excitability change (axonal capacitance removed) is absorbed
-# by re-tuning the endbulb weight.  Set to None for the full axon.
+# --- Fixed myelinated-axon truncation (SBC) ---------------------------------
+# The spherical bushy cell's long reconstructed axon is decorated near-passive
+# and is not used for an axonal travelling-wave dipole as the GBC's is, yet it
+# is about 60% of the compartments. Only a short proximal stub is kept: the AIS
+# plus this much myelinated axon (µm of path distance beyond the AIS). The stub
+# preserves a robust ventromedial orientation reference and the near-soma
+# axonal field; the excitability change from the removed axonal capacitance is
+# absorbed by re-tuning the endbulb weight. Set to None for the full axon.
 KEEP_MYELIN_UM = 50.0
 
 
@@ -96,7 +95,7 @@ def _classify_point(kind, pdist, hillock_um, ais_um, prox_um):
 
 
 def import3d_cell(swc_path):
-    """Load the SWC via NEURON Import3d (same path LFPy uses). Returns h."""
+    """Load the SWC via NEURON Import3d, the path LFPy uses. Returns h."""
     from neuron import h
     h.load_file('stdlib.hoc')
     h.load_file('import3d.hoc')
@@ -114,9 +113,9 @@ def build(swc_path, hillock_um, ais_um, prox_um, myelin_cutoff_um=None):
     ordered so every parent precedes its children; section 0 is the soma.
 
     myelin_cutoff_um : float or None
-        If set, drop every myelinated-axon point whose path distance from the soma
-        exceeds this cutoff, along with the entire distal subtree (a fixed proximal
-        stub is kept). None = full axon.
+        If set, drop every myelinated-axon point whose path distance from the
+        soma exceeds this cutoff, along with the whole distal subtree, keeping
+        a fixed proximal stub. None keeps the full axon.
     """
     from neuron import h
     import3d_cell(swc_path)
@@ -164,8 +163,8 @@ def build(swc_path, hillock_um, ais_um, prox_um, myelin_cutoff_um=None):
 
     # --- re-partition each section into single-class runs ---------------------
     out = []
-    # map (source section name, point index) -> output section index of the run
-    # that CONTAINS that point, so children can find their parent run.
+    # map (source section name, point index) to the output section index of the
+    # run containing that point, so children can find their parent run.
     run_of_point = {}
     pruned = set()   # source sections dropped by the myelin cutoff (subtree too)
 
@@ -219,7 +218,7 @@ def build(swc_path, hillock_um, ais_um, prox_um, myelin_cutoff_um=None):
                 end += 1
             run_pts = pts[start:end + 1]
             # geometric continuity: a non-first run repeats the previous run's
-            # last point as its first (duplicates a POINT, adds zero area).
+            # last point as its first, which duplicates a point but adds no area.
             prepend = None
             if start > 0:
                 prepend = pts[start - 1]

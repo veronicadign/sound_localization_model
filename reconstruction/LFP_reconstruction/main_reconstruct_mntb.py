@@ -3,27 +3,28 @@
 HybridLFPy LFP reconstruction for the MNTB (medial nucleus of the trapezoid body).
 
 The MNTB principal cell is driven by a single giant calyx of Held from the
-CONTRALATERAL globular bushy cell (GBC). This script reconstructs the MNTB
-POSTSYNAPTIC field (the calyx EPSC somatic sink + passive spread). The calyx
-PRESYNAPTIC current ("prespike") + cleft potential are a SEPARATE co-located
-generator added by --with-calyx (see calyx_model.hoc / Phase 3).
+contralateral globular bushy cell. This script reconstructs the postsynaptic
+field (the calyx EPSC somatic sink and its passive spread). The presynaptic
+calyx current, the prespike, is a separate co-located generator added by
+--with-calyx (see calyx_model.hoc).
 
   MNTB drive (per BrainstemModel.py):
-    GBC_{contra} -> MNTB_{side}   excitatory calyx, 1 per cell, decussating
+    GBC_{contra} to MNTB_{side}   excitatory calyx, 1 per cell, decussating
 
-Non-double-counting: the GBC axon crossing the midline (the dominant wave-III
-generator) is modelled in the AVCN GBC pipeline (VCN_c09_extended_axon.hoc), NOT
-here. This stage is the MNTB's own somatodendritic + calyx-terminal field.
+The GBC axon crossing the midline, the dominant wave-III generator, is
+modelled in the AVCN GBC pipeline (VCN_c09_extended_axon.hoc) and not here, so
+nothing is counted twice. This stage is the MNTB's own somatodendritic and
+calyx-terminal field.
 
 CLI:
   python LFP_reconstruction/main_reconstruct_mntb.py --pic-file RESULTS/<f>.pic \
       --angle 0 --side L --n-cells 100 [--with-calyx]
   mpiexec -n 4 python LFP_reconstruction/main_reconstruct_mntb.py ... --n-cells 3600
 
-Outputs -> RESULTS/lfp_tmp/output_mntb_{stem}_angle{A}_{S}/figures/
-           mntb_lfp_reconstruction.png, mntb_lfp_single_cells.png,
-           mntb_lfp_phase_cycle.png  (+ output_mntb_calyx_* and a combined
-           figure when --with-calyx)
+Outputs go to RESULTS/lfp_tmp/output_mntb_{stem}_angle{A}_{S}/figures/:
+  mntb_lfp_reconstruction.png, mntb_lfp_single_cells.png,
+  mntb_lfp_phase_cycle.png, plus output_mntb_calyx_* and a combined figure
+  when --with-calyx
 """
 
 import os
@@ -39,13 +40,15 @@ import hybridLFPy
 from recon_core import io_utils, params as P, paths
 from recon_core.population import ReconstructionPopulation
 from LFP_reconstruction import figures
-from recon_core.mpi_utils import COMM, RANK, broadcast_from_root, load_mechanisms
+from recon_core.mpi_utils import (COMM, RANK, broadcast_from_root,
+                                  load_mechanisms, set_temperature)
 
 MNTB_DIR = paths.MNTB_MODELS_DIR
 HOC_FILE = os.path.join(MNTB_DIR, 'mntb_model_active.hoc')
 
 # namntb lives in models/mntb; klt/kht/ih come from models/mso.
 load_mechanisms(MNTB_DIR, paths.MSO_MODELS_DIR)
+set_temperature(P.BODY_TEMPERATURE_C)
 
 DT, TSTOP = P.DT, P.TSTOP
 V_INIT = P.MNTB_V_INIT
@@ -73,7 +76,7 @@ class MNTBPopulation(ReconstructionPopulation):
     N_POST_TOTAL = N_MNTB_TOTAL
 
     def select_synapse_idx(self, cell, pop_type, idx, layer):
-        """The calyx of Held is axosomatic — it engulfs the soma, so place it there."""
+        """The calyx of Held is axosomatic: it engulfs the soma, so place it there."""
         soma_segs = cell.get_idx('soma')
         if pop_type == 'GBC' and len(soma_segs) > 0:
             return np.random.choice(soma_segs, size=len(idx),
@@ -82,7 +85,7 @@ class MNTBPopulation(ReconstructionPopulation):
 
     def draw_rand_pos(self, radius_x=ELLIPSE_RADIUS_X, radius_y=ELLIPSE_RADIUS_Y,
                       z_min=0.0, z_max=0.0, min_cell_interdist=1.0, **kwargs):
-        """Fill the MNTB elliptic cylinder (z collapsed), ordered tonotopically along x."""
+        """Fill the MNTB cylinder (z collapsed), ordered tonotopically along x."""
         return self.rejection_sample_ellipse(
             extents={'x': (-radius_x, radius_x), 'y': (-radius_y, radius_y),
                      'z': (z_min, z_max)},
@@ -115,7 +118,7 @@ def main():
     meta = broadcast_from_root(
         lambda: _extract_spikes(args.angle, side, pic_file=pic_file))
 
-    # MNTB is driven by the CONTRALATERAL GBC (the calyx decussates).
+    # The MNTB is driven by the contralateral GBC, since the calyx decussates.
     X_pops      = [f'GBC_{contra_side}']
     k_yxl_local = P.MNTB_CONVERGENCE     # dend_A, dend_B, soma <- 1 calyx on soma
     j_yx_local  = P.MNTB_J_YX
@@ -137,7 +140,7 @@ def main():
         n_syn_per_pop, args, seed=46, title='MNTB', fig_prefix='mntb',
         per_pop_syn=None, v_init=V_INIT)
 
-    # ----- Phase 3: co-located calyx prespike generator -----
+    # ----- co-located calyx prespike generator -----
     if args.with_calyx:
         from LFP_reconstruction import main_reconstruct_calyx as calyx_mod
         calyx_mod.run_calyx(args, meta, spikes_dir, stem, contra_side)
@@ -149,7 +152,7 @@ def _run_population(PopClass, hoc_file, X_pops, meta, spikes_dir, output_dir,
                     k_yxl_local, j_yx_local, tau_yx_local, syn_delay_loc,
                     syn_delay_scale, n_syn_per_pop, args, seed, title, fig_prefix,
                     per_pop_syn=None, v_init=V_INIT):
-    """Shared hybridLFPy run + plotting for a hand-written-hoc population."""
+    """Shared hybridLFPy run and plotting for a hand-written-hoc population."""
     side = args.side
     networkSim = hybridLFPy.CachedNetwork(
         simtime=TSTOP, dt=DT, spike_output_path=spikes_dir,
@@ -203,7 +206,7 @@ def _run_population(PopClass, hoc_file, X_pops, meta, spikes_dir, output_dir,
     COMM.Barrier()
 
     if RANK == 0:
-        figures.plot_all(output_dir, PROBE_Z, PROBE_X, PROBE_Y, side, args.angle,
+        figures.plot_all(output_dir, (PROBE_X, PROBE_Y, PROBE_Z), side, args.angle,
                          args.n_cells, figures.FigureStyle(name=title,
                                                            file_prefix=fig_prefix),
                          stimulus_freq=meta.get('stim_freq_hz'),
@@ -212,7 +215,7 @@ def _run_population(PopClass, hoc_file, X_pops, meta, spikes_dir, output_dir,
 
 
 def _plot_combined(output_dir, args, stem):
-    """Sum principal + calyx PointSourcePotential and plot the composite LFP."""
+    """Sum principal and calyx PointSourcePotential, then plot the composite."""
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt

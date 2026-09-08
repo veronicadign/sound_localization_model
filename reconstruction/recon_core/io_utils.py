@@ -3,13 +3,13 @@ HDF5 payloads exchanged between the pipeline stages.
 
 Three file kinds, each written by one stage and read by several:
 
-`population_dipole.h5`  (3, T) nA.um head-frame dipole for one run — the raw
+population_dipole.h5    (3, T) nA.um head-frame dipole for one run, the raw
                         output a producer keeps for its own figures.
-dipole record           the same dipole PLUS the anatomical position it must be
+dipole record           the same dipole plus the anatomical position it must be
                         projected from, one file per (nucleus, generator, side,
-                        condition).  This is the hand-off that lets
-                        `main_abr_full` superpose nuclei without re-simulating.
-`ABR.h5`                (n_electrodes, T) uV scalp potentials, band-passed.
+                        condition). This is the hand-off that lets main_abr_full
+                        superpose nuclei without re-simulating.
+ABR.h5                  (n_electrodes, T) uV scalp potentials, band-passed.
 
 Readers and writers live together so the layout cannot drift between them.
 """
@@ -28,7 +28,7 @@ _AXES = 'x=mediolateral, y=anteroposterior, z=inferosuperior'
 # Scalp potentials
 # ---------------------------------------------------------------------------
 def write_abr(output_dir, V_uV, electrode_names, srate, **attrs):
-    """Write `ABR.h5`; returns its path."""
+    """Write ABR.h5; returns its path."""
     path = os.path.join(output_dir, 'ABR.h5')
     with h5py.File(path, 'w') as f:
         f.create_dataset('data', data=np.asarray(V_uV))
@@ -37,12 +37,12 @@ def write_abr(output_dir, V_uV, electrode_names, srate, **attrs):
                          data=np.array(list(electrode_names), dtype='S'))
         f.attrs['units'] = 'µV'
         f.attrs.update({k: str(v) for k, v in attrs.items()})
-    print(f'ABR saved → {path}')
+    print(f'ABR saved to {path}')
     return path
 
 
 def read_abr(path):
-    """`ABR.h5` -> `(V_uV, electrode_names, srate)`."""
+    """Read ABR.h5 as (V_uV, electrode_names, srate)."""
     with h5py.File(path, 'r') as f:
         V = f['data'][()]
         names = [n.decode() for n in f['electrode_names'][:]]
@@ -51,11 +51,11 @@ def read_abr(path):
 
 
 def write_named_traces(path, traces, electrode_names, srate, **attrs):
-    """Write a multi-trace ABR file (per-generator / per-nucleus / composite).
+    """Write a multi-trace ABR file (per-generator, per-nucleus, composite).
 
-    Used by `main_abr_full` (`ABR_full.h5`), `main_abr_bi` (`BI.h5`) and the
-    multi-population per-nucleus scripts, which all store several named
-    (n_electrodes, T) arrays side by side instead of a single `data`.
+    Used by main_abr_full (ABR_full.h5), main_abr_bi (BI.h5) and the
+    multi-population per-nucleus scripts, which store several named
+    (n_electrodes, T) arrays side by side instead of a single data array.
     """
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with h5py.File(path, 'w') as f:
@@ -70,7 +70,7 @@ def write_named_traces(path, traces, electrode_names, srate, **attrs):
 
 
 def read_named_traces(path):
-    """Inverse of `write_named_traces` -> `(traces, electrode_names, srate)`."""
+    """Inverse of write_named_traces: (traces, electrode_names, srate)."""
     reserved = {'srate', 'electrode_names'}
     with h5py.File(path, 'r') as f:
         names = [n.decode() for n in f['electrode_names'][:]]
@@ -83,36 +83,40 @@ def read_named_traces(path):
 # Dipoles
 # ---------------------------------------------------------------------------
 def write_population_dipole(output_dir, p_head, srate):
-    """Write `population_dipole.h5` (head-frame, nA.um); returns its path."""
+    """Write population_dipole.h5 (head frame, nA.um); returns its path."""
     path = os.path.join(output_dir, 'population_dipole.h5')
     with h5py.File(path, 'w') as f:
         f.create_dataset('data', data=np.asarray(p_head))
         f.create_dataset('srate', data=float(srate))
         f.attrs['axes'] = _AXES
         f.attrs['units'] = 'nA·µm'
-    print(f'Population dipole saved → {path}')
+    print(f'Population dipole saved to {path}')
     return path
 
 
 def read_population_dipole(path):
-    """`population_dipole.h5` -> `(p_head, srate)`."""
+    """Read population_dipole.h5 as (p_head, srate)."""
     with h5py.File(path, 'r') as f:
         return f['data'][()], float(f['srate'][()])
 
 
-def save_dipole_record(stem, angle, nucleus, generator, side, p_head, r_dipole,
-                       n_total, n_cells, srate, condition='binaural'):
+def save_dipole_record(stem, cond_label, nucleus, generator, side, p_head,
+                       r_dipole, n_total, n_cells, srate, condition='binaural'):
     """Write one standardised head-frame dipole record.
 
-    The filename encodes the acoustic condition —
-    `<nucleus>__<generator>__<side>__<condition>.h5` — so a monaural run cannot
-    overwrite the binaural record for the same stimulus.  AVCN and MNTB have no
-    `--condition` flag and always write `binaural`: a given cochlear-nucleus or
-    MNTB side is driven by one ear whatever the other ear is doing, so its
-    per-side dipole is condition-invariant.  Consumers ask for a condition and
-    fall back to `binaural`.
+    cond_label is the stimulus label from paths.condition_key ('angle0',
+    'itd500us', 'ild-10dB') and selects the directory, so records from two
+    stimulus conditions never land on each other.
+
+    The filename encodes the acoustic condition
+    (<nucleus>__<generator>__<side>__<condition>.h5) so a monaural run cannot
+    overwrite the binaural record for the same stimulus. AVCN and MNTB have no
+    --condition flag and always write binaural: a given cochlear-nucleus or
+    MNTB side is driven by one ear whatever the other ear does, so its per-side
+    dipole does not depend on the condition. Consumers ask for a condition and
+    fall back to binaural.
     """
-    directory = paths.dipoles_dir_for(stem, angle)
+    directory = paths.dipoles_dir_for(stem, cond_label)
     os.makedirs(directory, exist_ok=True)
     path = os.path.join(directory,
                         f'{nucleus}__{generator}__{side}__{condition}.h5')
@@ -122,16 +126,17 @@ def save_dipole_record(stem, angle, nucleus, generator, side, p_head, r_dipole,
         f.create_dataset('srate', data=float(srate))
         f.attrs.update(nucleus=nucleus, generator=generator, side=side,
                        condition=condition, n_total=int(n_total),
-                       n_cells=int(n_cells), stem=str(stem), angle=str(angle),
+                       n_cells=int(n_cells), stem=str(stem),
+                       cond_label=str(cond_label),
                        axes=_AXES, units='nA·µm')
-    print(f'dipole record saved → {path}')
+    print(f'dipole record saved to {path}')
     return path
 
 
 def read_dipole_record(path):
-    """One dipole record -> `(attrs dict, p_head, r_dipole)`.
+    """Read one dipole record as (attrs dict, p_head, r_dipole).
 
-    `attrs['srate']` is filled in from the dataset, so a caller that superposes
+    attrs['srate'] is filled in from the dataset, so a caller superposing
     several records can take the time base from the records themselves.
     """
     with h5py.File(path, 'r') as f:
@@ -145,10 +150,10 @@ def read_dipole_record(path):
 # Near-field LFP (written by hybridLFPy.PostProcess)
 # ---------------------------------------------------------------------------
 def read_lfp_sum(output_dir, probe='PointSourcePotential'):
-    """`<probe>_sum.h5` -> `(lfp_uV (n_channels, T), srate)`.
+    """Read <probe>_sum.h5 as (lfp_uV (n_channels, T), srate).
 
-    hybridLFPy stores mV; the pipelines work in µV throughout, so the conversion
-    happens here rather than in each of the five callers that used to repeat it.
+    hybridLFPy stores mV and the pipelines work in µV throughout, so the
+    conversion happens here rather than in each caller.
     """
     path = os.path.join(output_dir, f'{probe}_sum.h5')
     with h5py.File(path, 'r') as f:

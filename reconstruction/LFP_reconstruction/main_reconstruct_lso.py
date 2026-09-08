@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-HybridLFPy LFP reconstruction for LSO population.
+HybridLFPy LFP reconstruction for the LSO population.
 
 CLI usage (single or multi-process):
   python LFP_reconstruction/main_reconstruct_lso.py [options]
@@ -14,13 +14,13 @@ Options:
   --n-single N      Single-cell contribution plots to save (default: 5)
 
 LSO connectivity (per BrainstemModel.py):
-  SBC_{side}   -> LSO_{side}  excitatory, ipsilateral, 40 synapses/cell
-  MNTBC_{side} -> LSO_{side}  inhibitory, ipsilateral,  8 synapses/cell
+  SBC_{side}   to LSO_{side}  excitatory, ipsilateral, 40 synapses/cell
+  MNTBC_{side} to LSO_{side}  inhibitory, ipsilateral,  8 synapses/cell
 
-Reuses presynaptic GDF files produced by main_reconstruct.py for the same
+Reuses the presynaptic GDF files main_reconstruct.py produced for the same
 pic/angle/side (spikes_{stem}_angle{ANGLE}_{SIDE}/).
 
-Outputs saved to RESULTS/lfp_tmp/output_lso_{stem}_angle{ANGLE}_{SIDE}/figures/:
+Outputs go to RESULTS/lfp_tmp/output_lso_{stem}_angle{ANGLE}_{SIDE}/figures/:
   lso_lfp_reconstruction.png
   lso_lfp_single_cells.png
 """
@@ -38,14 +38,24 @@ import hybridLFPy
 from recon_core import params as P, paths
 from recon_core.population import ReconstructionPopulation
 from LFP_reconstruction import figures
-from recon_core.mpi_utils import COMM, RANK, broadcast_from_root, load_mechanisms
+from recon_core.mpi_utils import (COMM, RANK, broadcast_from_root,
+                                  load_mechanisms, set_temperature)
 
 load_mechanisms(paths.MSO_MODELS_DIR)
+set_temperature(P.BODY_TEMPERATURE_C)
 
-HOC_FILE = os.path.join(paths.MSO_MODELS_DIR, 'lso_model_active.hoc')
-# Extended-axon morphology for the SPIKING driver (--generators spiking): soma+dends
-# of lso_model_active.hoc + ~4 mm ascending-LL active axon (build_lso_axon.py).
-HOC_FILE_AXON = os.path.join(paths.MSO_MODELS_DIR, 'lso_model_active_axon.hoc')
+# One morphology per side: the left cell is the mirror of the right (model x
+# negated), which keeps the lemniscal axon on head +z while tonotopy and the
+# dendritic tilt stay mirror-symmetric. See build_lso_axon.axon_dir().
+#   stub = synaptic drive; axon = spiking drive plus ~4 mm ascending-LL cable
+HOC_STUB = {s: os.path.join(paths.MSO_MODELS_DIR, f)
+            for s, f in (('R', 'lso_model_active.hoc'),
+                         ('L', 'lso_model_active_left.hoc'))}
+HOC_AXON = {s: os.path.join(paths.MSO_MODELS_DIR, f)
+            for s, f in (('R', 'lso_model_active_axon.hoc'),
+                         ('L', 'lso_model_active_axon_left.hoc'))}
+HOC_FILE = HOC_STUB['R']            # kept for callers that import the default
+HOC_FILE_AXON = HOC_AXON['R']
 
 DT, TSTOP = P.DT, P.TSTOP
 V_INIT = P.LSO_V_INIT
@@ -54,23 +64,25 @@ N_LSO_TOTAL = P.N_LSO_TOTAL
 HALF_HEIGHT_Y = P.LSO_HALF_HEIGHT_Y
 RADIUS_X = P.LSO_RADIUS_X
 RADIUS_Z = P.LSO_RADIUS_Z
-# populationParams keys only; draw_rand_pos uses the constants above directly, so
-# the radius_x/radius_y passed through hybridLFPy are not authoritative.
+# populationParams keys only; draw_rand_pos uses the constants above directly,
+# so the radius_x/radius_y passed through hybridLFPy are not authoritative.
 ELLIPSE_RADIUS_X = RADIUS_X
 ELLIPSE_RADIUS_Y = RADIUS_Z
 
 N_CH = P.N_CH
-PROBE_Z = P.probe_z(P.LSO_PROBE_HALF_SPAN)   # brackets the ±413.5 µm dendrite tips
-PROBE_X = np.zeros(N_CH)
-PROBE_Y = np.zeros(N_CH)
+# Along y, the dendritic axis, so the probe follows the current dipole instead
+# of running across the tonotopic gradient. See params.probe_positions().
+PROBE_X, PROBE_Y, PROBE_Z = P.probe_positions(P.LSO_PROBE_HALF_SPAN,
+                                              P.LSO_PROBE_AXIS)
 SIGMA = P.SIGMA_EXTRACELLULAR
 
 LAYER_BOUNDARIES = P.LSO_LAYERS
 
-# Per-channel scaling: the axonal travelling wave spans orders of magnitude across
-# the probe, so one global scale would flatten most channels into a line.
+# Per-channel scaling: the axonal travelling wave spans orders of magnitude
+# across the probe, so one global scale would flatten most channels.
 FIGURE_STYLE = figures.FigureStyle(
     name='LSO', file_prefix='lso', trace_scale='per_channel', trace_gain=0.100,
+    probe_axis=P.LSO_PROBE_AXIS,
     index_label=lambda gid, n: f'LSO idx '
     f'{int(round(gid * (N_LSO_TOTAL - 1) / (n - 1))) if n > 1 else 0}')
 
@@ -79,21 +91,20 @@ FIGURE_STYLE = figures.FigureStyle(
 # LSOPopulation subclass
 # ---------------------------------------------------------------------------
 class LSOPopulation(ReconstructionPopulation):
-    """LSO: ipsilateral SBC excitation on the dendrites, MNTBC inhibition on the soma."""
+    """LSO: ipsi SBC excitation on the dendrites, MNTBC inhibition on the soma."""
 
     PER_POP_SYN = P.LSO_SYNAPSES
     N_POST_TOTAL = N_LSO_TOTAL
 
     def select_synapse_idx(self, cell, pop_type, idx, layer):
-        """Place by SECTION NAME rather than by depth.
+        """Place by section name rather than by depth.
 
-        The reoriented nucleus spreads its somas along z, so hybridLFPy\'s depth
-        bands would miss most cells entirely.  Excitation goes onto the dendrites
-        with a distal bias; inhibition onto the soma, as the MNTB\'s glycinergic
+        The reoriented nucleus spreads its somas along z, so hybridLFPy's depth
+        bands would miss most cells. Excitation goes onto the dendrites with a
+        distal bias, inhibition onto the soma as the MNTB's glycinergic
         terminals do.
         """
-        dend_segs = np.concatenate([cell.get_idx('dend_A'), cell.get_idx('dend_B'),
-                                    cell.get_idx('dend_C')])
+        dend_segs = np.concatenate([cell.get_idx('dend_A'), cell.get_idx('dend_B')])
         soma_segs = cell.get_idx('soma')
 
         if pop_type == 'SBC' and len(dend_segs) > 0:
@@ -113,10 +124,10 @@ class LSOPopulation(ReconstructionPopulation):
         return idx
 
     def draw_rand_pos(self, min_cell_interdist=1.0, **kwargs):
-        """Fill the reoriented LSO, ordered mediolaterally (z) = low -> high CF.
+        """Fill the reoriented LSO, ordered mediolaterally (z), low to high CF.
 
         Geometry comes from the module constants, not from the radius_x/radius_y
-        hybridLFPy passes: the long axis is ROSTROCAUDAL (y) and the elliptic
+        hybridLFPy passes: the long axis is rostrocaudal (y) and the elliptic
         cross-section lies in the x-z plane, so the two do not correspond.
         """
         return self.rejection_sample_ellipse(
@@ -127,28 +138,28 @@ class LSOPopulation(ReconstructionPopulation):
 
 
 # ---------------------------------------------------------------------------
-# LSOSpikingPopulation — the SPIKING-output driver (Tolnai-BIC generator)
+# LSOSpikingPopulation, the spiking-output driver (Tolnai BIC generator)
 #
 # Instead of integrating SBC/MNTBC synaptic currents, each cell is driven by its
-# OWN NEST LSO output train (X = LSO_{side}) through a single SUPRATHRESHOLD
-# synapse on the AIS, so it fires one AP per spike; the AP propagates up the
-# ~4 mm ascending-LL active axon (lso_model_active_axon.hoc) as a travelling-wave
-# current dipole — the integrated spiking output the scalp BIC reflects. Mirrors
-# the calyx suprathreshold-drive pattern (main_reconstruct_calyx.CalyxPopulation).
-# Reuses LSOPopulation.get_all_SpCells (tonotopic 1-source window) and draw_rand_pos.
+# own NEST LSO output train (X = LSO_{side}) through a single suprathreshold
+# synapse on the AIS, so it fires one AP per spike. The AP propagates up the
+# ~4 mm ascending-LL active axon (lso_model_active_axon.hoc) as a travelling
+# wave, the integrated spiking output the scalp BIC reflects. Same pattern as
+# main_reconstruct_calyx.CalyxPopulation. Reuses LSOPopulation.get_all_SpCells
+# and draw_rand_pos.
 # ---------------------------------------------------------------------------
 class LSOSpikingPopulation(LSOPopulation):
-    """LSO driven suprathreshold by its own output train -> axonal travelling wave."""
+    """LSO driven suprathreshold by its own output train, giving an axonal wave."""
 
     PER_POP_SYN = P.LSO_SPIKING_SYNAPSES
 
     def select_synapse_idx(self, cell, pop_type, idx, layer):
         """One suprathreshold synapse on the axon initial segment.
 
-        Firing the AIS both initiates the action potential and seeds the saltatory
-        volley up the ascending lemniscal axon — the travelling-wave dipole this
-        population exists to produce.  Falls back to the soma if the morphology has
-        no AIS.
+        Firing the AIS initiates the action potential and seeds the saltatory
+        volley up the ascending lemniscal axon, the travelling-wave dipole this
+        population exists to produce. Falls back to the soma if the morphology
+        has no AIS.
         """
         drive_segs = cell.get_idx('ais')
         if len(drive_segs) == 0:
@@ -199,13 +210,13 @@ def main():
         lambda: _extract_spikes(cond_val, side, pic_file=pic_file))
 
     if args.generators == 'spiking':
-        # Drive each cell suprathreshold from its OWN LSO output train up the
+        # Drive each cell suprathreshold from its own LSO output train up the
         # extended active axon (travelling-wave dipole). One synapse on the AIS
         # (soma layer, k row 2); insert_all_synapses reassigns it to the AIS.
         pop_class     = LSOSpikingPopulation
-        hoc_file      = HOC_FILE_AXON
-        rot_axis      = []   # no rotation -> coherent rostro-dorsal volley (axon is
-                             #                off-principal-axis, so any spin decoheres it)
+        hoc_file      = HOC_AXON[side]
+        rot_axis      = []   # no rotation, so the rostro-dorsal volley stays
+                             # coherent (the axon is off the principal axis)
         X_pops        = [f'LSO_{side}']
         k_yxl_local   = P.LSO_SPIKING_CONVERGENCE   # 1 synapse -> AIS via override
         j_yx_local    = P.LSO_SPIKING_J_YX
@@ -214,12 +225,13 @@ def main():
         syn_delay_scale = [None]
     else:
         pop_class     = LSOPopulation
-        hoc_file      = HOC_FILE
-        rot_axis      = ['z']
+        hoc_file      = HOC_STUB[side]
+        rot_axis      = ['y']   # spin about the dendritic axis: randomises the
+                                # cells without touching the dipole they carry
         X_pops = [f'SBC_{side}', f'MNTBC_{side}']
 
-        # Single layer: 40 SBC (-> dendrites) + 8 MNTBC (-> soma), placed by the
-        # section-name override in LSOPopulation.insert_all_synapses.
+        # Single layer: 40 SBC on the dendrites and 8 MNTBC on the soma, placed
+        # by the section-name override in LSOPopulation.insert_all_synapses.
         k_sbc, k_mntbc = P.LSO_CONVERGENCE[0]
         if args.condition == 'ipsilateral':
             k_mntbc = 0                    # silence MNTBC (contralateral inhibition)
@@ -314,17 +326,11 @@ def main():
     COMM.Barrier()
 
     if RANK == 0:
-        figures.plot_all(output_dir, PROBE_Z, PROBE_X, PROBE_Y, side, args.angle,
+        figures.plot_all(output_dir, (PROBE_X, PROBE_Y, PROBE_Z), side, args.angle,
                          args.n_cells, FIGURE_STYLE,
                          stimulus_freq=meta.get('stim_freq_hz'),
                          single_contribs=single_contribs, soma_pos=soma_pos,
                          cell_gids=cell_indices, dt_ms=DT)
 
-# ---------------------------------------------------------------------------
-# Plotting: compound LFP
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# Plotting: single-cell contributions
-# ---------------------------------------------------------------------------
 if __name__ == '__main__':
     main()

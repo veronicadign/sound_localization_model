@@ -2,14 +2,14 @@
 """Download the Sitek et al. (2019) subcortical auditory atlas ROIs.
 
 Sitek KR, Gulban OF, Calabrese E, Johnson GA, Lage-Castellanos A, Moerel M,
-Ghosh SS, De Martino F (2019).  "Mapping the human subcortical auditory system
-using histology, post mortem MRI and in vivo MRI at 7T."  eLife 8:e48932.
-Repository: https://github.com/sitek/subcortical-auditory-atlas  (BSD-3-Clause)
+Ghosh SS, De Martino F (2019). "Mapping the human subcortical auditory system
+using histology, post mortem MRI and in vivo MRI at 7T." eLife 8:e48932.
+Repository: https://github.com/sitek/subcortical-auditory-atlas (BSD-3-Clause)
 
 Three ROI volumes, all in MNI ICBM152 2009b Nonlinear Symmetric space:
-  bigbrain   - post mortem histology (BigBrain 2015), conjunction ROIs
-  postmortem - 7T post mortem MRI (Duke Center for In Vivo Microscopy)
-  invivo     - in vivo 7T fMRI atlas (thresholded)
+  bigbrain     post mortem histology (BigBrain 2015), conjunction ROIs
+  postmortem   7T post mortem MRI (Duke Center for In Vivo Microscopy)
+  invivo       in vivo 7T fMRI atlas (thresholded)
 
 Cached (gitignored) in data/atlases/sitek/.
 
@@ -27,8 +27,8 @@ PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))))
 sys.path.insert(0, PACKAGE_ROOT)
 
-# reconstruction/ is two (or three) levels up; adding it lets the atlas
-# scripts share the pipeline's own notion of where the repository is.
+# reconstruction/ is a couple of levels up; put it on sys.path so the atlas
+# scripts share the pipeline's own repository root.
 from recon_core.paths import REPO_ROOT                            # noqa: E402
 CACHE_DIR = os.path.join(REPO_ROOT, 'data', 'atlases', 'sitek')
 
@@ -48,7 +48,7 @@ def cached_path(key):
 
 
 def fetch(force=False, verbose=True):
-    """Download any missing ROI volume.  Returns {key: local path}."""
+    """Download any missing ROI volume, returning {key: local path}."""
     os.makedirs(CACHE_DIR, exist_ok=True)
     out, manifest = {}, {}
     for key, name in FILES.items():

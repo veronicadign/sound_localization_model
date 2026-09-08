@@ -1,22 +1,16 @@
 """
 Live bridge to the NEST network definition.
 
-`simulate/models/BrainstemModel/params.py` defines the spiking model the
-reconstruction is built on: how many cells each nucleus has, how many synapses
-converge, how long each pathway takes, what every reversal potential is.  The
-reconstruction needs those same numbers, and used to carry hand-copied duplicates
-of them.  This module reads the real thing instead.
+simulate/models/BrainstemModel/params.py defines the spiking model the
+reconstruction is built on: cell counts, convergences, pathway delays and
+reversal potentials. This module reads it instead of duplicating the numbers.
 
-The import is awkward for two reasons, both handled here:
+The import needs care on two counts. params.py starts with an absolute import
+(from utils.cochlea_utils import ...), so simulate/ itself has to be on
+sys.path, not just the repo root. And utils.cochlea_utils pulls in brian2,
+which costs a couple of seconds, so the instance is built once and cached.
 
-* `params.py` starts with ``from utils.cochlea_utils import ...`` — an absolute
-  import — so `simulate/` itself must be on `sys.path`, not merely the repo root.
-* `utils.cochlea_utils` pulls in brian2/brian2hears, which costs a couple of
-  seconds.  The instance is therefore built once and cached, and only modules
-  that actually need network parameters import this one.
-
-`simulate/` is the professor's code and is never modified from here — this is a
-read-only view of it.
+simulate/ is read-only from here.
 """
 
 import functools
@@ -32,10 +26,9 @@ PARAMS_FILE = os.path.join(SIMULATE_DIR, 'models', 'BrainstemModel', 'params.py'
 
 @functools.lru_cache(maxsize=1)
 def parameters():
-    """The NEST `Parameters` dataclass instance, with defaults as committed.
+    """The NEST Parameters dataclass instance, with defaults as committed.
 
-    Cached: repeated calls return the same object, so importing it from several
-    modules costs one load.
+    Cached, so importing it from several modules costs one load.
     """
     if SIMULATE_DIR not in sys.path:
         sys.path.insert(0, SIMULATE_DIR)

@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-Assert that `recon_core.params` really mirrors the NEST network definition.
+Assert that recon_core.params really mirrors the NEST network definition.
 
-The reconstruction used to carry hand-copied duplicates of
-`simulate/models/BrainstemModel/params.py`, and they drifted.  These checks fail
-if a literal is ever retyped back into the reconstruction, or if the two
-pipelines start disagreeing about the same synapse again.
+These checks fail if a literal from simulate/models/BrainstemModel/params.py is
+retyped into the reconstruction, or if the two pipelines start disagreeing
+about the same synapse.
 
     python tests/test_params.py
 """
@@ -101,9 +100,9 @@ def main():
     check('LSO_TAU_YX', P.LSO_TAU_YX,
           [P.LSO_SYNAPSES[k]['tau2'] for k in ('SBC', 'MNTBC')])
 
-    # Reconstruction-only parameters. These are NOT in params.py by design (see the
-    # params module docstring); the check is that they still exist and are sane, so
-    # nobody "fixes" them by wiring them to a NEST value they are not comparable to.
+    # Reconstruction-only parameters, deliberately absent from params.py (see the
+    # params module docstring). The check is that they still exist and are sane,
+    # so nobody wires them to a NEST value they are not comparable to.
     print('\nreconstruction-only parameters (deliberately NOT from params.py)')
     check('DT positive', P.DT > 0, True)
     check('Nyquist above the ABR band',

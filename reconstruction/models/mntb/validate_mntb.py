@@ -1,29 +1,34 @@
 #!/usr/bin/env python3
 """
-Phase 1 validation: human MNTB principal-cell morphology
-(models/mntb/mntb_model_active.hoc; klt/kht/ih from models/mso, fast Na
-`namntb` from models/mntb).
+Validation of the human MNTB principal-cell morphology
+(models/mntb/mntb_model_active.hoc; klt/kht/ih from models/mso, fast Na namntb
+from models/mntb).
 
-MNTB principal-cell signature checked here:
-  1. Fires a FAST action potential (Kv3.1/KHT -> brief half-width).
-  2. Sub-threshold rectification from the low-threshold K current (KLT):
-     a depolarising step stays well below the ohmic prediction.
-  3. Depolarising SAG on hyperpolarising steps (Ih).
-  4. PHASE-LOCKS to fast calyx-of-Held EPSCs: fires ~1 spike per event and
-     follows a high-frequency train (the physiological drive; MNTB is phasic to
-     DC, like the other R&M nuclei, but follows brief suprathreshold EPSCs).
+The MNTB principal-cell signature checked here:
+  1. Fires a fast action potential (Kv3.1/KHT gives a brief half-width).
+  2. Sub-threshold rectification from the low-threshold K current (KLT): a
+     depolarising step stays well below the ohmic prediction.
+  3. Depolarising sag on hyperpolarising steps (Ih).
+  4. Phase-locks to fast calyx-of-Held EPSCs: about one spike per event, and it
+     follows a high-frequency train. The cell is phasic to DC like the other
+     R&M nuclei but follows brief suprathreshold EPSCs.
 
 Usage:
   python models/mntb/validate_mntb.py
 
-Saves models/mntb/figures/mntb_iclamp_validation.png (+ stdout PASS/FAIL table)
+Saves models/mntb/figures/mntb_iclamp_validation.png and a PASS/FAIL table
 """
 import os
+import sys
 import argparse
 
 import numpy as np
 import neuron
 from neuron import h
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__)))))
+from recon_core import params as _P                      # noqa: E402
 
 HERE       = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.dirname(HERE)          # reconstruction/models
@@ -58,7 +63,7 @@ def main():
     h.load_file(args.morphology)
 
     soma = h.soma
-    h.celsius = 34.0
+    h.celsius = _P.BODY_TEMPERATURE_C   # the pipeline temperature
     t = h.Vector().record(h._ref_t)
     v = h.Vector().record(soma(0.5)._ref_v)
 
@@ -117,9 +122,9 @@ def main():
     fired      = any(nsp >= 1 for _, _, _, nsp in traces)
     fast_ap    = (ap_halfwidth is not None) and (ap_halfwidth < 1.0)   # ms
     sag_ok     = any(s > 1.0 for s in sags.values())
-    # KLT rectification: the depolarising deflection is SUBLINEAR (outward
-    # rectification) — doubling the current (0.1 -> 0.2 nA) gives < 2x deflection,
-    # because KLT activates and shunts the depolarisation.
+    # KLT rectification: the depolarising deflection is sublinear (outward
+    # rectification), so doubling the current (0.1 to 0.2 nA) gives less than
+    # twice the deflection because KLT activates and shunts it.
     rect_ok    = (0.1 in v_defl and 0.2 in v_defl
                   and 0 < v_defl[0.2] < 2.0 * v_defl[0.1])
     max_follow = max([f for f, r in follow_rates.items() if r >= 0.8], default=0)

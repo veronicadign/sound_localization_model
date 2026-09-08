@@ -2,16 +2,16 @@
 """
 Binaural interaction, per nucleus: does RL equal R + L?
 
-`--figure additivity`  RL overlaid on R+L for one nucleus, with the residual
-                       BI = RL - (R+L) underneath.  AVCN and MNTB are monaural by
-                       construction, so their residual must be ~0; a non-zero one
-                       would mean a monaural generator had leaked binaural
-                       information, and is the check that it has not.
-`--figure residual`    the residual alone, all four nuclei side by side on one
-                       shared y-range, so their relative size is readable.
+--figure additivity  RL overlaid on R+L for one nucleus, with the residual
+                     BI = RL - (R+L) underneath. AVCN and MNTB are monaural by
+                     construction, so their residual must be about 0; a
+                     non-zero one would mean a monaural generator had leaked
+                     binaural information.
+--figure residual    the residual alone, all four nuclei side by side on one
+                     shared y-range, so their relative size is readable.
 
-Both call `main_abr_full.assemble()` for the three acoustic conditions; nothing is
-re-simulated.
+Both call main_abr_full.assemble() for the three acoustic conditions; nothing
+is re-simulated.
 
 Usage:
   python ABR_reconstruction/plots/binaural.py --pic-file RESULTS/<f>.pic
@@ -42,12 +42,12 @@ GROUPS = {'monaural': ['AVCN', 'MNTB'],   # RL = R+L, no interaction possible
           'all': ALL_NUCLEI}
 
 
-def _nucleus_composites(stem, angle, nucleus, band, lso_generator='synaptic'):
+def _nucleus_composites(stem, cond_label, nucleus, band, lso_generator='synaptic'):
     """Return {tag: composite (n_e,T) µV} for RL/R/L, restricted to one nucleus."""
     comp = {}
     srate = None
     for tag, cond in CONDITIONS.items():
-        V_gen, _V_nuc, sr = assemble(stem, angle, {nucleus}, ['L', 'R'], cond,
+        V_gen, _V_nuc, sr = assemble(stem, cond_label, {nucleus}, ['L', 'R'], cond,
                                      lso_generator=lso_generator, band=band)
         comp[tag] = V_gen['composite']
         srate = sr
@@ -71,9 +71,9 @@ def plot_additivity(out_dir, nucleus, comp, srate, band):
         top_data.append((R, L, RL, sumRL))
         bot_data.append(resid)
 
-        # --- top: overlay RL vs R+L (+ the R, L components) ---
-        # colour standard: right ear = green, left ear = light purple;
-        # RL = dark grey (so the dashed red R+L overlay stays visible).
+        # --- top: overlay RL against R+L, plus the R and L components ---
+        # colour standard: right ear green, left ear light purple, RL dark grey
+        # so the dashed red R+L overlay stays visible.
         ax = axes[0, j]
         ax.plot(t, R,  color='seagreen',    lw=0.9, alpha=0.7, label='R (right)')
         ax.plot(t, L,  color='mediumpurple', lw=0.9, alpha=0.7, label='L (left)')
@@ -86,8 +86,8 @@ def plot_additivity(out_dir, nucleus, comp, srate, band):
         if j == 0:
             ax.legend(fontsize=8, loc='upper right')
 
-        # --- bottom: residual RL-(R+L) = the binaural interaction (BI) ---
-        # For monaural nuclei (AVCN/MNTB) this is ~0; for MSO/LSO it is the real BI.
+        # --- bottom: residual RL-(R+L), the binaural interaction ---
+        # About 0 for the monaural nuclei (AVCN, MNTB), the real BI for MSO/LSO.
         axr = axes[1, j]
         axr.plot(t, resid, color='crimson', lw=1.2)
         axr.axhline(0, color='k', lw=0.4, ls=':')
@@ -97,9 +97,9 @@ def plot_additivity(out_dir, nucleus, comp, srate, band):
         axr.set_title(f'binaural interaction  (max |·| = {np.abs(resid).max():.2e} µV)',
                       fontsize=9)
 
-    # share y-range across the top row (ABR traces) and, separately, across the
-    # bottom row (residuals) — the two rows are NOT forced to match each other.
-    # A 10% margin keeps curves off the plot boundary.
+    # share the y-range across the top row (ABR traces) and, separately, across
+    # the bottom row (residuals); the two rows are not forced to match each
+    # other. A 10% margin keeps curves off the plot boundary.
     PAD = 0.10
     top_lo = min(min(x.min() for x in quad) for quad in top_data)
     top_hi = max(max(x.max() for x in quad) for quad in top_data)
@@ -128,11 +128,11 @@ def plot_additivity(out_dir, nucleus, comp, srate, band):
     return max_resid
 
 
-def plot_residual(out_dir, stem, angle, band, nuclei, derivation='Cz-M1'):
+def plot_residual(out_dir, stem, cond_label, band, nuclei, derivation='Cz-M1'):
     """The BI residual for every nucleus, side by side on one shared y-range."""
     residuals, t = {}, None
     for nuc in nuclei:
-        comp, srate = _nucleus_composites(stem, angle, nuc, band)
+        comp, srate = _nucleus_composites(stem, cond_label, nuc, band)
         R, _  = _derive(comp['R'],  ELECTRODES, derivation)
         L, _  = _derive(comp['L'],  ELECTRODES, derivation)
         RL, _ = _derive(comp['RL'], ELECTRODES, derivation)
@@ -181,14 +181,15 @@ def main():
 
     stem = paths.pic_stem(paths.resolve_pic(args.pic_file))
     band = tuple(float(x) for x in args.band.split(','))
-    out_dir = os.path.join(paths.ABR_TMP_DIR, f'output_bi_{stem}_angle{args.angle}')
+    _, cond_label = paths.condition_key(args.angle)
+    out_dir = os.path.join(paths.ABR_TMP_DIR, f'output_bi_{stem}_{cond_label}')
 
     if args.figure == 'residual':
-        plot_residual(out_dir, stem, args.angle, band, ALL_NUCLEI)
+        plot_residual(out_dir, stem, cond_label, band, ALL_NUCLEI)
         return
 
     for nucleus in GROUPS.get(args.nucleus, [args.nucleus]):
-        comp, srate = _nucleus_composites(stem, args.angle, nucleus, band)
+        comp, srate = _nucleus_composites(stem, cond_label, nucleus, band)
         plot_additivity(out_dir, nucleus, comp, srate, band)
 
 

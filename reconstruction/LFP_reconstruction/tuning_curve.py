@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Near-field LFP amplitude as a function of sound azimuth — the tuning curve.
+Near-field LFP amplitude as a function of sound azimuth, the tuning curve.
 
 For each angle it phase-folds the compound LFP on the centre probe channel and
-measures the peak-to-peak of the averaged cycle.  Folding first is what makes the
-comparison meaningful: it keeps only what is phase-locked to the stimulus, so the
-curve reflects the population's response rather than the noise floor.
+measures the peak-to-peak of the averaged cycle. Folding first keeps only what
+is phase-locked to the stimulus, so the curve reflects the population response
+rather than the noise floor.
 
-Reads finished runs; nothing is re-simulated.  Angles with no run are skipped and
-reported rather than silently dropped.
+Reads finished runs and re-simulates nothing. Angles with no run are skipped
+and reported rather than silently dropped.
 
 Usage:
   python reconstruction/main.py lfp tuning --pic-file RESULTS/<f>.pic --side L \\
@@ -82,7 +82,7 @@ def main():
             with open(meta) as f:
                 stim_freq = json.load(f).get('stim_freq_hz')
     if stim_freq is None:
-        sys.exit('error: stimulus frequency unknown — pass --stim-freq. '
+        sys.exit('error: stimulus frequency unknown, pass --stim-freq. '
                  'A tuning curve needs a periodic stimulus.')
 
     angles, amplitudes, missing = [], [], []
@@ -100,7 +100,7 @@ def main():
     if missing:
         print('no usable run for angles: ' + ', '.join(str(a) for a in missing))
     if not angles:
-        sys.exit('no finished runs found — run the LFP pipeline for these angles first.')
+        sys.exit('no finished runs found, run the LFP pipeline for these angles first.')
 
     fig, ax = plt.subplots(figsize=(8, 5), constrained_layout=True)
     ax.plot(angles, amplitudes, marker='o', color='firebrick', lw=2, markersize=8)
@@ -119,7 +119,7 @@ def main():
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     fig.savefig(out, dpi=150)
     plt.close(fig)
-    print(f'figure saved → {out}')
+    print(f'figure saved to {out}')
 
 
 if __name__ == '__main__':

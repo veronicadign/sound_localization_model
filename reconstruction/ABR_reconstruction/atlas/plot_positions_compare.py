@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Figure: the CURRENT nucleus positions against the two atlas candidate sets.
+"""Figure: the current nucleus positions against the two atlas candidate sets.
 
 Three views through the 4-sphere head model (sagittal, coronal, axial) plus an
-MNI152 sagittal overlay, with the pipeline's live positions, the route-A (Sitek)
-positions and the A+B hybrid drawn together.
+MNI152 sagittal overlay, with the pipeline's live positions, the route-A
+(Sitek) positions and the A+B hybrid drawn together.
 
     python ABR_reconstruction/atlas/plot_positions_compare.py
--> RESULTS/atlas_validation/figures/positions_compare.png
+writes RESULTS/atlas_validation/figures/positions_compare.png
 """
 
 import os
@@ -22,8 +22,8 @@ ABR_DIR = os.path.dirname(_HERE)
 PACKAGE_ROOT = os.path.dirname(ABR_DIR)
 sys.path.insert(0, PACKAGE_ROOT)
 
-# reconstruction/ is two (or three) levels up; adding it lets the atlas
-# scripts share the pipeline's own notion of where the repository is.
+# reconstruction/ is a couple of levels up; put it on sys.path so the atlas
+# scripts share the pipeline's own repository root.
 from recon_core.paths import REPO_ROOT                            # noqa: E402
 sys.path.insert(0, _HERE)
 sys.path.insert(0, REPO_ROOT)

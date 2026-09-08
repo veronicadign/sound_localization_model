@@ -3,15 +3,15 @@
 
 Two separate things are asserted.
 
-1. THE HEAD MODEL IS UNCHANGED.  The 4-sphere radii/conductivities, the
-   electrode positions and all four model->head ROTATION matrices must still
+1. The head model is unchanged. The 4-sphere radii and conductivities, the
+   electrode positions and all four model to head ROTATION matrices must still
    equal the pre-refactor literals, transcribed here from
        main_abr.py:85-131,133-159   main_abr_lso.py:61-114
        main_abr_avcn.py:65-145      main_abr_mntb.py:60-125
        plots/electrodes.py
-   Only the nucleus POSITIONS were meant to move.
+   Only the nucleus positions were meant to move.
 
-2. THE POSITIONS ARE DERIVED, NOT TYPED.  Each head-frame position must be
+2. The positions are derived, not typed. Each head-frame position must be
    exactly its atlas MNI coordinate mapped through the head-frame origin, the
    L/R pair must be mirror-symmetric, the MNTB must satisfy the Kulesza
    constraints it is built from, and everything must sit inside the brain shell.
@@ -31,7 +31,7 @@ from recon_core import head_geometry as hg           # noqa: E402
 
 
 # Positions the pipeline used before the atlas verification (head frame, um,
-# right side).  None was atlas-derived.  Reported, not asserted.
+# right side). None was atlas-derived. Reported, not asserted.
 SUPERSEDED_POS_UM = {
     'MSO':  [5_000., -18_700., -29_520.],
     'LSO':  [9_000., -20_500., -30_000.],
@@ -110,19 +110,25 @@ def check_head_model():
     sys.path.insert(0, paths.MSO_MODELS_DIR)
     from build_lso_axon import AXON_DIR                              # noqa: WPS433
 
-    def lso_rot(a, side):
+    def lso_rot_right(a):
         ez = np.asarray(a, float)
         ez = ez / np.linalg.norm(ez)
-        s = -1.0 if side == 'R' else 1.0
         ex = np.array([0., 0., 1.]) - np.array([0., 0., 1.]).dot(ez) * ez
         if np.linalg.norm(ex) < 1e-6:
             ex = np.array([1., 0., 0.]) - np.array([1., 0., 0.]).dot(ez) * ez
-        ex = s * ex / np.linalg.norm(ex)
+        ex = -ex / np.linalg.norm(ex)
         return np.vstack([ex, np.cross(ez, ex), ez])
 
+    # The left cell uses a mirrored morphology, so its rotation is the sagittal
+    # mirror of the right one, R_L = M R_R M, not a per-side axis flip. That is
+    # what keeps the lemniscal axon on head +z on both sides while tonotopy and
+    # the dendritic tilt stay mirror-symmetric.
+    mirror = np.diag([-1., 1., 1.])
+    rot_r = lso_rot_right(AXON_DIR)
     check('LSO_AXON_DIR', hg.LSO_AXON_DIR, AXON_DIR)
-    check('ROTATION_LSO[R]', hg.ROTATION_LSO['R'], lso_rot(AXON_DIR, 'R'), atol=1e-15)
-    check('ROTATION_LSO[L]', hg.ROTATION_LSO['L'], lso_rot(AXON_DIR, 'L'), atol=1e-15)
+    check('ROTATION_LSO[R]', hg.ROTATION_LSO['R'], rot_r, atol=1e-15)
+    check('ROTATION_LSO[L]', hg.ROTATION_LSO['L'], mirror @ rot_r @ mirror,
+          atol=1e-15)
 
     for nm, rot in (('MSO', hg.ROTATION_MSO), ('AVCN', hg.ROTATION_AVCN),
                     ('MNTB', hg.ROTATION_MNTB), ('LSO', hg.ROTATION_LSO)):

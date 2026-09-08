@@ -1,14 +1,14 @@
 """
-Phase-2 proof-of-concept: LSO axonal travelling-wave dipole (single cell).
+Single-cell check of the LSO axonal travelling-wave dipole.
 
-Loads `lso_model_active_axon.hoc` (LSO soma + dendrites + ascending-LL active
-axon), fires ONE action potential at the soma, and checks that:
+Loads lso_model_active_axon.hoc (LSO soma, dendrites and ascending-LL active
+axon), fires one action potential at the soma, and checks that:
 
-  1. the AP propagates SALTATORILY along the LL axon (node Vm sequence),
+  1. the AP propagates saltatorily along the LL axon (node Vm sequence),
   2. conduction velocity is physiological (~3-10 m/s),
-  3. the net current-dipole moment shows a TRAVELLING-WAVE signature (moving
-     axonal source) whose magnitude dwarfs the ~37 nA·µm synaptic z-dipole of the
-     150 um-stub model (project_lso_human_morphology).
+  3. the net current-dipole moment shows a travelling-wave signature (a moving
+     axonal source) whose magnitude dwarfs the ~37 nA.µm synaptic z-dipole of
+     the 150 um stub model.
 
 Saves models/mso/figures/lso_axon_travelingwave.png
 
@@ -17,9 +17,14 @@ Usage:
 """
 
 import os
+import sys
 import numpy as np
 import neuron
 from neuron import h
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__)))))
+from recon_core import params as _P                      # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 HOC  = os.path.join(HERE, 'lso_model_active_axon.hoc')
@@ -61,7 +66,7 @@ def main():
     print(f'loaded: {len(nodes)} nodes, {len(internodes)} internodes')
 
     h.cvode.use_fast_imem(1)
-    h.celsius = 34.0
+    h.celsius = _P.BODY_TEMPERATURE_C   # the pipeline temperature
     pos = seg_positions()
 
     soma = h.soma   # plain Section in this hoc (not a SectionList)
@@ -82,8 +87,8 @@ def main():
                 imem.append(h.Vector().record(seg._ref_i_membrane_))
     seg_pos = np.array(seg_pos)
 
-    # fire ONE AP with a brief strong somatic pulse. The LSO is phasic (strong
-    # KLT) so rheobase with the added axonal load is ~6 nA — use 8 nA for margin.
+    # fire one AP with a brief strong somatic pulse. The LSO is phasic (strong
+    # KLT), so rheobase with the added axonal load is ~6 nA; 8 nA gives margin.
     ic = h.IClamp(soma(0.5)); ic.delay, ic.dur, ic.amp = 2.0, 0.5, 8.0
     h.finitialize(-63.0)
     h.continuerun(8.0)

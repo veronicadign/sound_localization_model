@@ -2,25 +2,22 @@
 """
 One entry point for the whole reconstruction.
 
-The pipeline has three stages, and this dispatches the last two:
+The pipeline has three stages and this dispatches the last two:
 
     NEST spiking simulation      ../simulate/main.py       (run separately)
-      -> near-field LFP          main.py lfp <nucleus>
-      -> far-field scalp ABR     main.py abr <nucleus|full|bi>
+      near-field LFP             main.py lfp <nucleus>
+      far-field scalp ABR        main.py abr <nucleus|full|bi>
 
-Run it from the REPOSITORY ROOT (the folder holding `reconstruction/` and
-`simulate/`), so that `RESULTS/...` arguments resolve — RESULTS/ is shared with
-`simulate`, which writes the `.pic` files into it.
+Run it from the repository root (the folder holding reconstruction/ and
+simulate/) so that RESULTS/... arguments resolve.
 
-`abr full` is the headline: it superposes every nucleus's stored dipole into one
-composite ABR.  It consumes what the per-nucleus `abr` runs produce, so run those
-first — see commands.txt for the full recipe.
+abr full superposes every nucleus's stored dipole into one composite ABR, so
+the per-nucleus abr runs have to happen first. See commands.txt for the recipe.
 
-This is a dispatcher and nothing else: each target is the same module you can
-still run directly (`python ABR_reconstruction/main_abr.py ...`), and every
-unrecognised flag is passed straight through to it.  That also makes it
-MPI-transparent — `mpiexec -n 4 python main.py abr full ...` works, because the
-ranks all reach the same module.
+This is only a dispatcher: each target is the same module you can run directly
+(python ABR_reconstruction/main_abr.py ...) and every unrecognised flag is
+passed through. That also keeps it MPI transparent, since all ranks reach the
+same module.
 
     python reconstruction/main.py lfp mso --pic-file RESULTS/<f>.pic --side L
     python reconstruction/main.py abr full --pic-file RESULTS/<f>.pic --side both
@@ -34,12 +31,12 @@ import os
 import runpy
 import sys
 
-# This file sits at the top of reconstruction/, so its own directory IS the
+# This file sits at the top of reconstruction/, so its own directory is the
 # package root every target path is relative to.
 PACKAGE_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, PACKAGE_ROOT)
 
-# target -> module path, relative to reconstruction/
+# target to module path, relative to reconstruction/
 LFP_TARGETS = {
     'mso': 'LFP_reconstruction/main_reconstruct.py',
     'gbc': 'LFP_reconstruction/main_reconstruct_avcn.py',
@@ -92,13 +89,12 @@ DESCRIPTIONS = {
 
 
 def run(script, argv):
-    """Execute a target exactly as `python <script>` would.
+    """Execute a target exactly as python <script> would.
 
-    That means putting the script's OWN directory first on `sys.path`, which is
-    what the interpreter does for a directly-run file and what several targets
-    rely on to reach their sibling modules (`models/avcn/validate_gbc.py` imports
-    `gbc_biophysics` that way).  Without it, dispatching here would not be
-    equivalent to running the script directly.
+    That means putting the script's own directory first on sys.path, as the
+    interpreter does for a directly-run file. Several targets rely on it to
+    reach sibling modules (models/avcn/validate_gbc.py imports gbc_biophysics
+    that way).
     """
     path = os.path.join(PACKAGE_ROOT, script)
     if not os.path.exists(path):
@@ -111,7 +107,7 @@ def run(script, argv):
 def print_targets():
     print(__doc__.strip().splitlines()[0])
     for stage, targets in STAGES.items():
-        print(f'\n{stage}  — {DESCRIPTIONS[stage]}')
+        print(f'\n{stage}  {DESCRIPTIONS[stage]}')
         width = max(len(name) for name in targets)
         for name, script in targets.items():
             print(f'    {name:<{width}}  {script}')

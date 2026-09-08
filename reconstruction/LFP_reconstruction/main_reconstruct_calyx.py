@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 """
-Co-located calyx-of-Held PRESPIKE population (Phase 3), summed with the MNTB
-principal-cell LFP by linear superposition. Invoked by main_reconstruct_mntb.py
+Co-located calyx-of-Held prespike population, summed with the MNTB principal
+cell LFP by linear superposition. Invoked by main_reconstruct_mntb.py
 --with-calyx; not usually run standalone.
 
-Each calyx is the presynaptic terminal of a contralateral GBC axon. Driven by the
-GBC_{contra} spike train through a SUPRATHRESHOLD somatic-axon synapse so it fires
-one presynaptic AP per input; its transmembrane current is the extracellular
-prespike. Same probe + nucleus geometry as the principal cells, so the two LFPs
-add exactly (output_mntb_calyx_* -> summed in main_reconstruct_mntb._plot_combined).
+Each calyx is the presynaptic terminal of a contralateral GBC axon. It is
+driven by the GBC_{contra} spike train through a suprathreshold somatic-axon
+synapse so it fires one presynaptic AP per input, and its transmembrane
+current is the extracellular prespike. Probe and nucleus geometry match the
+principal cells, so the two LFPs add exactly (output_mntb_calyx_* is summed in
+main_reconstruct_mntb._plot_combined).
 
-Cleft leak conductance g_cl ~ 1 uS is characterised single-cell in
-models/mntb/validate_calyx.py (V_cleft ~ several mV). The population prespike LFP
-here is the calyx transmembrane current (the dominant term); cross-cell ephaptic
-feedback onto the apposed MNTB soma is NOT modelled (LFPy cells are independent) —
-a documented limitation.
+The cleft leak conductance g_cl ~ 1 uS is characterised single-cell in
+models/mntb/validate_calyx.py (V_cleft of several mV). The population prespike
+here is the calyx transmembrane current, the dominant term. Cross-cell
+ephaptic feedback onto the apposed MNTB soma is not modelled, since LFPy cells
+are independent.
 """
 import os
 import sys
@@ -30,15 +31,15 @@ CALYX_HOC = os.path.join(paths.MNTB_MODELS_DIR, 'calyx_model.hoc')
 
 
 class CalyxPopulation(MNTBPopulation):
-    """Presynaptic calyx terminal: suprathreshold GBC drive onto the pre-calyx axon."""
+    """Presynaptic calyx terminal: suprathreshold GBC drive on the pre-calyx axon."""
 
     PER_POP_SYN = P.CALYX_SYNAPSES
 
     def select_synapse_idx(self, cell, pop_type, idx, layer):
-        """Drive the PRE-calyx axon, not the terminal.
+        """Drive the pre-calyx axon, not the terminal.
 
-        The prespike is the presynaptic action potential invading the terminal, so
-        the drive has to arrive upstream of it and propagate in.
+        The prespike is the presynaptic action potential invading the terminal,
+        so the drive has to arrive upstream of it and propagate in.
         """
         pre_segs = cell.get_idx('precalyx_axon')
         if pop_type == 'GBC' and len(pre_segs) > 0:
@@ -52,9 +53,9 @@ def run_calyx(args, meta, spikes_dir, stem, contra_side):
     k_yxl_local = P.MNTB_CONVERGENCE   # single synapse, re-placed by the override
     j_yx_local  = P.CALYX_J_YX
     tau_yx_local = P.CALYX_TAU_YX
-    # The calyx AP occurs essentially AT the GBC spike (presynaptic), whereas the
-    # postsynaptic MNTB EPSC carries the full GBCs2MNTBCs = 0.5 ms synaptic delay.
-    # So the prespike LEADS the postsynaptic sink by ~0.5 ms (the in-vivo prespike).
+    # The calyx AP happens at the GBC spike, while the postsynaptic MNTB EPSC
+    # carries the full GBCs2MNTBCs = 0.5 ms synaptic delay, so the prespike
+    # leads the postsynaptic sink by ~0.5 ms as it does in vivo.
     syn_delay_loc   = P.CALYX_DELAYS
     syn_delay_scale = [None]
 

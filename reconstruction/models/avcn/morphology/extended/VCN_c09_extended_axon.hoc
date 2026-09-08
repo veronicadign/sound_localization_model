@@ -21,7 +21,7 @@ objref Proximal_Dendrite
 Proximal_Dendrite = new SectionList()
 objref soma
 soma = new SectionList()
-create sections[457]
+create sections[443]
 
 access sections[0]
 Distal_Dendrite.append()
@@ -3353,8 +3353,8 @@ access sections[273]
 Internode.append()
 connect sections[273](0), sections[254](1)
 sections[273] {
-    pt3dadd(-7.110556, -16.647791, -55.392872, 1.500000)
-    pt3dadd(-53.308353, 36.868961, -187.686935, 1.500000)
+    pt3dadd(-7.110556, -16.647791, -55.392872, 2.100000)
+    pt3dadd(-71.787468, 58.275665, -240.604568, 2.100000)
 }
 
 access sections[274]
@@ -3623,8 +3623,8 @@ access sections[291]
 Node_of_Ranvier.append()
 connect sections[291](0), sections[273](1)
 sections[291] {
-    pt3dadd(-53.308353, 36.868961, -187.686935, 1.000000)
-    pt3dadd(-53.616337, 37.225742, -188.568909, 1.000000)
+    pt3dadd(-71.787468, 58.275665, -240.604568, 1.400000)
+    pt3dadd(-72.095459, 58.632442, -241.486526, 1.400000)
 }
 
 access sections[292]
@@ -3859,8 +3859,8 @@ access sections[312]
 Internode.append()
 connect sections[312](0), sections[291](1)
 sections[312] {
-    pt3dadd(-53.616337, 37.225742, -188.568909, 1.500000)
-    pt3dadd(-99.814133, 90.742493, -320.862976, 1.500000)
+    pt3dadd(-72.095459, 58.632442, -241.486526, 2.100000)
+    pt3dadd(-136.772369, 133.555893, -426.698212, 2.100000)
 }
 
 access sections[313]
@@ -4081,8 +4081,8 @@ access sections[330]
 Node_of_Ranvier.append()
 connect sections[330](0), sections[312](1)
 sections[330] {
-    pt3dadd(-99.814133, 90.742493, -320.862976, 1.000000)
-    pt3dadd(-100.122116, 91.099274, -321.744934, 1.000000)
+    pt3dadd(-136.772369, 133.555893, -426.698212, 1.400000)
+    pt3dadd(-137.080353, 133.912674, -427.580200, 1.400000)
 }
 
 access sections[331]
@@ -4226,8 +4226,8 @@ access sections[344]
 Internode.append()
 connect sections[344](0), sections[330](1)
 sections[344] {
-    pt3dadd(-100.122116, 91.099274, -321.744934, 1.500000)
-    pt3dadd(-146.319916, 144.616028, -454.039001, 1.500000)
+    pt3dadd(-137.080353, 133.912674, -427.580200, 2.100000)
+    pt3dadd(-201.757263, 208.836136, -612.791870, 2.100000)
 }
 
 access sections[345]
@@ -4392,8 +4392,8 @@ access sections[357]
 Node_of_Ranvier.append()
 connect sections[357](0), sections[344](1)
 sections[357] {
-    pt3dadd(-146.319916, 144.616028, -454.039001, 1.000000)
-    pt3dadd(-146.627899, 144.972809, -454.920959, 1.000000)
+    pt3dadd(-201.757263, 208.836136, -612.791870, 1.400000)
+    pt3dadd(-202.065262, 209.192917, -613.673828, 1.400000)
 }
 
 access sections[358]
@@ -4554,8 +4554,8 @@ access sections[370]
 Internode.append()
 connect sections[370](0), sections[357](1)
 sections[370] {
-    pt3dadd(-146.627899, 144.972809, -454.920959, 1.500000)
-    pt3dadd(-192.825699, 198.489563, -587.215027, 1.500000)
+    pt3dadd(-202.065262, 209.192917, -613.673828, 2.100000)
+    pt3dadd(-266.742157, 284.116364, -798.885559, 2.100000)
 }
 
 access sections[371]
@@ -4644,8 +4644,8 @@ access sections[379]
 Node_of_Ranvier.append()
 connect sections[379](0), sections[370](1)
 sections[379] {
-    pt3dadd(-192.825699, 198.489563, -587.215027, 1.000000)
-    pt3dadd(-193.133682, 198.846344, -588.096985, 1.000000)
+    pt3dadd(-266.742157, 284.116364, -798.885559, 1.400000)
+    pt3dadd(-267.050140, 284.473145, -799.767517, 1.400000)
 }
 
 access sections[380]
@@ -4784,8 +4784,8 @@ access sections[389]
 Internode.append()
 connect sections[389](0), sections[379](1)
 sections[389] {
-    pt3dadd(-193.133682, 198.846344, -588.096985, 1.500000)
-    pt3dadd(-239.331482, 252.363098, -720.391052, 1.500000)
+    pt3dadd(-267.050140, 284.473145, -799.767517, 2.100000)
+    pt3dadd(-331.727081, 359.396606, -984.979187, 2.100000)
 }
 
 access sections[390]
@@ -4886,8 +4886,8 @@ access sections[397]
 Node_of_Ranvier.append()
 connect sections[397](0), sections[389](1)
 sections[397] {
-    pt3dadd(-239.331482, 252.363098, -720.391052, 1.000000)
-    pt3dadd(-239.639465, 252.719864, -721.273010, 1.000000)
+    pt3dadd(-331.727081, 359.396606, -984.979187, 1.400000)
+    pt3dadd(-332.035065, 359.753387, -985.861145, 1.400000)
 }
 
 access sections[398]
@@ -4991,8 +4991,8 @@ access sections[403]
 Internode.append()
 connect sections[403](0), sections[397](1)
 sections[403] {
-    pt3dadd(-239.639465, 252.719864, -721.273010, 1.500000)
-    pt3dadd(-285.837250, 306.236633, -853.567078, 1.500000)
+    pt3dadd(-332.035065, 359.753387, -985.861145, 2.100000)
+    pt3dadd(-396.711975, 434.676819, -1171.072876, 2.100000)
 }
 
 access sections[404]
@@ -5037,8 +5037,8 @@ access sections[408]
 Node_of_Ranvier.append()
 connect sections[408](0), sections[403](1)
 sections[408] {
-    pt3dadd(-285.837250, 306.236633, -853.567078, 1.000000)
-    pt3dadd(-286.145233, 306.593414, -854.449036, 1.000000)
+    pt3dadd(-396.711975, 434.676819, -1171.072876, 1.400000)
+    pt3dadd(-397.019958, 435.033600, -1171.954834, 1.400000)
 }
 
 access sections[409]
@@ -5088,8 +5088,8 @@ access sections[413]
 Internode.append()
 connect sections[413](0), sections[408](1)
 sections[413] {
-    pt3dadd(-286.145233, 306.593414, -854.449036, 1.500000)
-    pt3dadd(-332.343048, 360.110168, -986.743103, 1.500000)
+    pt3dadd(-397.019958, 435.033600, -1171.954834, 2.100000)
+    pt3dadd(-461.696869, 509.957062, -1357.166504, 2.100000)
 }
 
 access sections[414]
@@ -5120,8 +5120,8 @@ access sections[416]
 Node_of_Ranvier.append()
 connect sections[416](0), sections[413](1)
 sections[416] {
-    pt3dadd(-332.343048, 360.110168, -986.743103, 1.000000)
-    pt3dadd(-332.651031, 360.466949, -987.625061, 1.000000)
+    pt3dadd(-461.696869, 509.957062, -1357.166504, 1.400000)
+    pt3dadd(-462.004852, 510.313843, -1358.048462, 1.400000)
 }
 
 access sections[417]
@@ -5137,8 +5137,8 @@ access sections[418]
 Internode.append()
 connect sections[418](0), sections[416](1)
 sections[418] {
-    pt3dadd(-332.651031, 360.466949, -987.625061, 1.500000)
-    pt3dadd(-378.848816, 413.983704, -1119.919189, 1.500000)
+    pt3dadd(-462.004852, 510.313843, -1358.048462, 2.100000)
+    pt3dadd(-526.681763, 585.237305, -1543.260132, 2.100000)
 }
 
 access sections[419]
@@ -5161,296 +5161,184 @@ access sections[420]
 Node_of_Ranvier.append()
 connect sections[420](0), sections[418](1)
 sections[420] {
-    pt3dadd(-378.848816, 413.983704, -1119.919189, 1.000000)
-    pt3dadd(-379.156799, 414.340454, -1120.801147, 1.000000)
+    pt3dadd(-526.681763, 585.237305, -1543.260132, 1.400000)
+    pt3dadd(-526.989746, 585.594055, -1544.142090, 1.400000)
 }
 
 access sections[421]
 Internode.append()
 connect sections[421](0), sections[420](1)
 sections[421] {
-    pt3dadd(-379.156799, 414.340454, -1120.801147, 1.500000)
-    pt3dadd(-425.354614, 467.857208, -1253.095215, 1.500000)
+    pt3dadd(-526.989746, 585.594055, -1544.142090, 2.100000)
+    pt3dadd(-591.666687, 660.517517, -1729.353882, 2.100000)
 }
 
 access sections[422]
 Node_of_Ranvier.append()
 connect sections[422](0), sections[421](1)
 sections[422] {
-    pt3dadd(-425.354614, 467.857208, -1253.095215, 1.000000)
-    pt3dadd(-425.662598, 468.213989, -1253.977173, 1.000000)
+    pt3dadd(-591.666687, 660.517517, -1729.353882, 1.400000)
+    pt3dadd(-591.974670, 660.874329, -1730.235840, 1.400000)
 }
 
 access sections[423]
 Internode.append()
 connect sections[423](0), sections[422](1)
 sections[423] {
-    pt3dadd(-425.662598, 468.213989, -1253.977173, 1.500000)
-    pt3dadd(-471.860382, 521.730774, -1386.271240, 1.500000)
+    pt3dadd(-591.974670, 660.874329, -1730.235840, 2.100000)
+    pt3dadd(-656.651550, 735.797791, -1915.447510, 2.100000)
 }
 
 access sections[424]
 Node_of_Ranvier.append()
 connect sections[424](0), sections[423](1)
 sections[424] {
-    pt3dadd(-471.860382, 521.730774, -1386.271240, 1.000000)
-    pt3dadd(-472.168365, 522.087524, -1387.153198, 1.000000)
+    pt3dadd(-656.651550, 735.797791, -1915.447510, 1.400000)
+    pt3dadd(-656.959534, 736.154541, -1916.329468, 1.400000)
 }
 
 access sections[425]
 Internode.append()
 connect sections[425](0), sections[424](1)
 sections[425] {
-    pt3dadd(-472.168365, 522.087524, -1387.153198, 1.500000)
-    pt3dadd(-518.366150, 575.604309, -1519.447266, 1.500000)
+    pt3dadd(-656.959534, 736.154541, -1916.329468, 2.100000)
+    pt3dadd(-721.636475, 811.078003, -2101.541260, 2.100000)
 }
 
 access sections[426]
 Node_of_Ranvier.append()
 connect sections[426](0), sections[425](1)
 sections[426] {
-    pt3dadd(-518.366150, 575.604309, -1519.447266, 1.000000)
-    pt3dadd(-518.674133, 575.961060, -1520.329224, 1.000000)
+    pt3dadd(-721.636475, 811.078003, -2101.541260, 1.400000)
+    pt3dadd(-721.944458, 811.434753, -2102.423096, 1.400000)
 }
 
 access sections[427]
 Internode.append()
 connect sections[427](0), sections[426](1)
 sections[427] {
-    pt3dadd(-518.674133, 575.961060, -1520.329224, 1.500000)
-    pt3dadd(-564.871948, 629.477844, -1652.623291, 1.500000)
+    pt3dadd(-721.944458, 811.434753, -2102.423096, 2.100000)
+    pt3dadd(-786.621338, 886.358215, -2287.634766, 2.100000)
 }
 
 access sections[428]
 Node_of_Ranvier.append()
 connect sections[428](0), sections[427](1)
 sections[428] {
-    pt3dadd(-564.871948, 629.477844, -1652.623291, 1.000000)
-    pt3dadd(-565.179932, 629.834595, -1653.505249, 1.000000)
+    pt3dadd(-786.621338, 886.358215, -2287.634766, 1.400000)
+    pt3dadd(-786.929321, 886.715027, -2288.516846, 1.400000)
 }
 
 access sections[429]
 Internode.append()
 connect sections[429](0), sections[428](1)
 sections[429] {
-    pt3dadd(-565.179932, 629.834595, -1653.505249, 1.500000)
-    pt3dadd(-611.377747, 683.351379, -1785.799316, 1.500000)
+    pt3dadd(-786.929321, 886.715027, -2288.516846, 2.100000)
+    pt3dadd(-851.606262, 961.638489, -2473.728516, 2.100000)
 }
 
 access sections[430]
 Node_of_Ranvier.append()
 connect sections[430](0), sections[429](1)
 sections[430] {
-    pt3dadd(-611.377747, 683.351379, -1785.799316, 1.000000)
-    pt3dadd(-611.685730, 683.708130, -1786.681274, 1.000000)
+    pt3dadd(-851.606262, 961.638489, -2473.728516, 1.400000)
+    pt3dadd(-851.914246, 961.995239, -2474.610352, 1.400000)
 }
 
 access sections[431]
 Internode.append()
 connect sections[431](0), sections[430](1)
 sections[431] {
-    pt3dadd(-611.685730, 683.708130, -1786.681274, 1.500000)
-    pt3dadd(-657.883484, 737.224854, -1918.975342, 1.500000)
+    pt3dadd(-851.914246, 961.995239, -2474.610352, 2.100000)
+    pt3dadd(-916.591187, 1036.918701, -2659.822021, 2.100000)
 }
 
 access sections[432]
 Node_of_Ranvier.append()
 connect sections[432](0), sections[431](1)
 sections[432] {
-    pt3dadd(-657.883484, 737.224854, -1918.975342, 1.000000)
-    pt3dadd(-658.191467, 737.581665, -1919.857300, 1.000000)
+    pt3dadd(-916.591187, 1036.918701, -2659.822021, 1.400000)
+    pt3dadd(-916.899170, 1037.275513, -2660.704102, 1.400000)
 }
 
 access sections[433]
 Internode.append()
 connect sections[433](0), sections[432](1)
 sections[433] {
-    pt3dadd(-658.191467, 737.581665, -1919.857300, 1.500000)
-    pt3dadd(-704.389282, 791.098389, -2052.151367, 1.500000)
+    pt3dadd(-916.899170, 1037.275513, -2660.704102, 2.100000)
+    pt3dadd(-981.576050, 1112.198975, -2845.915771, 2.100000)
 }
 
 access sections[434]
 Node_of_Ranvier.append()
 connect sections[434](0), sections[433](1)
 sections[434] {
-    pt3dadd(-704.389282, 791.098389, -2052.151367, 1.000000)
-    pt3dadd(-704.697266, 791.455200, -2053.033203, 1.000000)
+    pt3dadd(-981.576050, 1112.198975, -2845.915771, 1.400000)
+    pt3dadd(-981.884033, 1112.555664, -2846.797852, 1.400000)
 }
 
 access sections[435]
 Internode.append()
 connect sections[435](0), sections[434](1)
 sections[435] {
-    pt3dadd(-704.697266, 791.455200, -2053.033203, 1.500000)
-    pt3dadd(-750.895081, 844.971924, -2185.327393, 1.500000)
+    pt3dadd(-981.884033, 1112.555664, -2846.797852, 2.100000)
+    pt3dadd(-1046.560913, 1187.479126, -3032.009521, 2.100000)
 }
 
 access sections[436]
 Node_of_Ranvier.append()
 connect sections[436](0), sections[435](1)
 sections[436] {
-    pt3dadd(-750.895081, 844.971924, -2185.327393, 1.000000)
-    pt3dadd(-751.203064, 845.328735, -2186.209229, 1.000000)
+    pt3dadd(-1046.560913, 1187.479126, -3032.009521, 1.400000)
+    pt3dadd(-1046.868896, 1187.835938, -3032.891357, 1.400000)
 }
 
 access sections[437]
 Internode.append()
 connect sections[437](0), sections[436](1)
 sections[437] {
-    pt3dadd(-751.203064, 845.328735, -2186.209229, 1.500000)
-    pt3dadd(-797.400879, 898.845459, -2318.503418, 1.500000)
+    pt3dadd(-1046.868896, 1187.835938, -3032.891357, 2.100000)
+    pt3dadd(-1111.545898, 1262.759399, -3218.103027, 2.100000)
 }
 
 access sections[438]
 Node_of_Ranvier.append()
 connect sections[438](0), sections[437](1)
 sections[438] {
-    pt3dadd(-797.400879, 898.845459, -2318.503418, 1.000000)
-    pt3dadd(-797.708862, 899.202271, -2319.385254, 1.000000)
+    pt3dadd(-1111.545898, 1262.759399, -3218.103027, 1.400000)
+    pt3dadd(-1111.853882, 1263.116211, -3218.985107, 1.400000)
 }
 
 access sections[439]
 Internode.append()
 connect sections[439](0), sections[438](1)
 sections[439] {
-    pt3dadd(-797.708862, 899.202271, -2319.385254, 1.500000)
-    pt3dadd(-843.906616, 952.718994, -2451.679443, 1.500000)
+    pt3dadd(-1111.853882, 1263.116211, -3218.985107, 2.100000)
+    pt3dadd(-1176.530762, 1338.039673, -3404.196777, 2.100000)
 }
 
 access sections[440]
 Node_of_Ranvier.append()
 connect sections[440](0), sections[439](1)
 sections[440] {
-    pt3dadd(-843.906616, 952.718994, -2451.679443, 1.000000)
-    pt3dadd(-844.214600, 953.075806, -2452.561523, 1.000000)
+    pt3dadd(-1176.530762, 1338.039673, -3404.196777, 1.400000)
+    pt3dadd(-1176.838745, 1338.396362, -3405.078613, 1.400000)
 }
 
 access sections[441]
 Internode.append()
 connect sections[441](0), sections[440](1)
 sections[441] {
-    pt3dadd(-844.214600, 953.075806, -2452.561523, 1.500000)
-    pt3dadd(-890.412415, 1006.592529, -2584.855469, 1.500000)
+    pt3dadd(-1176.838745, 1338.396362, -3405.078613, 2.100000)
+    pt3dadd(-1241.515625, 1413.319824, -3590.290283, 2.100000)
 }
 
 access sections[442]
 Node_of_Ranvier.append()
 connect sections[442](0), sections[441](1)
 sections[442] {
-    pt3dadd(-890.412415, 1006.592529, -2584.855469, 1.000000)
-    pt3dadd(-890.720398, 1006.949341, -2585.737549, 1.000000)
-}
-
-access sections[443]
-Internode.append()
-connect sections[443](0), sections[442](1)
-sections[443] {
-    pt3dadd(-890.720398, 1006.949341, -2585.737549, 1.500000)
-    pt3dadd(-936.918213, 1060.466064, -2718.031494, 1.500000)
-}
-
-access sections[444]
-Node_of_Ranvier.append()
-connect sections[444](0), sections[443](1)
-sections[444] {
-    pt3dadd(-936.918213, 1060.466064, -2718.031494, 1.000000)
-    pt3dadd(-937.226196, 1060.822876, -2718.913574, 1.000000)
-}
-
-access sections[445]
-Internode.append()
-connect sections[445](0), sections[444](1)
-sections[445] {
-    pt3dadd(-937.226196, 1060.822876, -2718.913574, 1.500000)
-    pt3dadd(-983.423950, 1114.339600, -2851.207520, 1.500000)
-}
-
-access sections[446]
-Node_of_Ranvier.append()
-connect sections[446](0), sections[445](1)
-sections[446] {
-    pt3dadd(-983.423950, 1114.339600, -2851.207520, 1.000000)
-    pt3dadd(-983.731934, 1114.696411, -2852.089600, 1.000000)
-}
-
-access sections[447]
-Internode.append()
-connect sections[447](0), sections[446](1)
-sections[447] {
-    pt3dadd(-983.731934, 1114.696411, -2852.089600, 1.500000)
-    pt3dadd(-1029.929810, 1168.213135, -2984.383545, 1.500000)
-}
-
-access sections[448]
-Node_of_Ranvier.append()
-connect sections[448](0), sections[447](1)
-sections[448] {
-    pt3dadd(-1029.929810, 1168.213135, -2984.383545, 1.000000)
-    pt3dadd(-1030.237793, 1168.569946, -2985.265625, 1.000000)
-}
-
-access sections[449]
-Internode.append()
-connect sections[449](0), sections[448](1)
-sections[449] {
-    pt3dadd(-1030.237793, 1168.569946, -2985.265625, 1.500000)
-    pt3dadd(-1076.435547, 1222.086670, -3117.559570, 1.500000)
-}
-
-access sections[450]
-Node_of_Ranvier.append()
-connect sections[450](0), sections[449](1)
-sections[450] {
-    pt3dadd(-1076.435547, 1222.086670, -3117.559570, 1.000000)
-    pt3dadd(-1076.743530, 1222.443481, -3118.441650, 1.000000)
-}
-
-access sections[451]
-Internode.append()
-connect sections[451](0), sections[450](1)
-sections[451] {
-    pt3dadd(-1076.743530, 1222.443481, -3118.441650, 1.500000)
-    pt3dadd(-1122.941284, 1275.960205, -3250.735596, 1.500000)
-}
-
-access sections[452]
-Node_of_Ranvier.append()
-connect sections[452](0), sections[451](1)
-sections[452] {
-    pt3dadd(-1122.941284, 1275.960205, -3250.735596, 1.000000)
-    pt3dadd(-1123.249268, 1276.317017, -3251.617676, 1.000000)
-}
-
-access sections[453]
-Internode.append()
-connect sections[453](0), sections[452](1)
-sections[453] {
-    pt3dadd(-1123.249268, 1276.317017, -3251.617676, 1.500000)
-    pt3dadd(-1169.447144, 1329.833740, -3383.911621, 1.500000)
-}
-
-access sections[454]
-Node_of_Ranvier.append()
-connect sections[454](0), sections[453](1)
-sections[454] {
-    pt3dadd(-1169.447144, 1329.833740, -3383.911621, 1.000000)
-    pt3dadd(-1169.755127, 1330.190552, -3384.793701, 1.000000)
-}
-
-access sections[455]
-Internode.append()
-connect sections[455](0), sections[454](1)
-sections[455] {
-    pt3dadd(-1169.755127, 1330.190552, -3384.793701, 1.500000)
-    pt3dadd(-1215.952881, 1383.707275, -3517.087646, 1.500000)
-}
-
-access sections[456]
-Node_of_Ranvier.append()
-connect sections[456](0), sections[455](1)
-sections[456] {
-    pt3dadd(-1215.952881, 1383.707275, -3517.087646, 1.000000)
-    pt3dadd(-1216.260864, 1384.064087, -3517.969727, 1.000000)
+    pt3dadd(-1241.515625, 1413.319824, -3590.290283, 1.400000)
+    pt3dadd(-1241.823608, 1413.676636, -3591.172363, 1.400000)
 }
 
 access sections[0]

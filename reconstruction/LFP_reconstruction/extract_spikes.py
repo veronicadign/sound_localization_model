@@ -1,5 +1,5 @@
 """
-Extract MSO presynaptic spike trains from a .pic file -> GDF files.
+Extract MSO presynaptic spike trains from a .pic file into GDF files.
 
 Output (in spikes_dir/):
   spikes-SBC_{side}-0.gdf    tab-separated: neuron_id  spike_time_ms
@@ -24,8 +24,8 @@ from recon_core import brainstem, paths                         # noqa: E402
 sys.path.insert(0, brainstem.SIMULATE_DIR)
 
 # Ipsilateral populations extracted for every reconstruction.
-# ANF is the auditory-nerve endbulb drive for the AVCN (GBC) pipeline; MSO/LSO
-# ignore it (they reference only their own X_pops), so the extra GDF is harmless.
+# ANF is the auditory-nerve endbulb drive for the AVCN (GBC) pipeline; MSO and
+# LSO reference only their own X_pops, so the extra GDF is harmless.
 POPS = ['ANF', 'SBC', 'MNTBC', 'LNTBC']
 
 
@@ -57,11 +57,11 @@ def _write_pop(data_side, pop, label, spikes_dir, metadata):
 def _select_condition(angle_map, key):
     """Pick the condition key from a .pic rate map.
 
-    Exact match first -> preserves ALL existing behavior (integer angles, 0/0.0,
-    and exact float ITD keys): returns the identical sub-dict, so downstream GDF
-    output is byte-identical. Only when the exact key is absent do we fall back to
-    the nearest numeric key within 1e-6 (1 us for ITD-in-seconds), to absorb float
-    representation drift. A genuinely-missing condition raises a clear KeyError.
+    Exact match first, which preserves existing behaviour (integer angles, 0/0.0
+    and exact float ITD keys) and returns the identical sub-dict, so downstream
+    GDF output stays byte-identical. Only when the exact key is absent does it
+    fall back to the nearest numeric key within 1e-6 (1 us for ITD in seconds),
+    to absorb float representation drift. A missing condition raises KeyError.
     """
     if key in angle_map:
         return key
@@ -80,11 +80,11 @@ def extract_and_save(pic_file, angle, side, spikes_dir):
     write GDF files and metadata.json to spikes_dir.
 
     Extracts:
-      SBC_{contra_side} — contralateral SBC (MSO medial dendrite input)
-      GBC_{contra_side} — contralateral GBC (MNTB calyx-of-Held drive; decussating)
-      SBC_{side}        — ipsilateral SBC   (lateral dendrite input)
-      MNTBC_{side}      — ipsilateral MNTBC (soma inhibition)
-      LNTBC_{side}      — ipsilateral LNTBC (soma inhibition)
+      SBC_{contra_side}   contralateral SBC (MSO medial dendrite input)
+      GBC_{contra_side}   contralateral GBC (MNTB calyx drive, decussating)
+      SBC_{side}          ipsilateral SBC   (lateral dendrite input)
+      MNTBC_{side}        ipsilateral MNTBC (soma inhibition)
+      LNTBC_{side}        ipsilateral LNTBC (soma inhibition)
 
     Returns
     -------
@@ -116,14 +116,14 @@ def extract_and_save(pic_file, angle, side, spikes_dir):
     # Contralateral SBC (lateral dendrite excitation)
     _write_pop(data_contra, 'SBC', f'SBC_{contra_side}', spikes_dir, metadata)
 
-    # Contralateral GBC — calyx-of-Held drive for the MNTB pipeline (the
-    # GBC->MNTB projection decussates, so the ipsilateral MNTB is driven by the
-    # contralateral GBC). MSO/LSO/AVCN ignore this extra GDF.
+    # Contralateral GBC, the calyx-of-Held drive for the MNTB pipeline (the GBC
+    # to MNTB projection decussates, so the ipsilateral MNTB is driven by the
+    # contralateral GBC). MSO, LSO and AVCN ignore this extra GDF.
     _write_pop(data_contra, 'GBC', f'GBC_{contra_side}', spikes_dir, metadata)
 
-    # Ipsilateral LSO OUTPUT train — the LSO projection-neuron spikes that drive
-    # the spiking-LSO ABR (travelling-wave dipole up the lateral lemniscus). This
-    # is the LSO nucleus's own output, not an input; MSO/AVCN/MNTB ignore it.
+    # Ipsilateral LSO output train, the LSO projection-neuron spikes that drive
+    # the spiking-LSO ABR (travelling-wave dipole up the lateral lemniscus).
+    # This is the nucleus's own output, not an input; the others ignore it.
     if 'LSO' in data_ipsi:
         _write_pop(data_ipsi, 'LSO', f'LSO_{side}', spikes_dir, metadata)
 

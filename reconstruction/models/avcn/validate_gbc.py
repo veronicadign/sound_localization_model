@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Phase 0/1 validation: load a GBC morphology, decorate with cnmodel XM13_nacncoop
+Validation: load a GBC morphology, decorate it with cnmodel XM13_nacncoop
 channels, and run a somatic current-clamp step.
 
-A correct Type-II bushy cell should show:
-  * strong sub-threshold rectification (low-threshold K, KLT),
-  * at most a single onset action potential to a supra-threshold step,
-  * a depolarising sag on hyperpolarising steps (Ih).
+A correct Type II bushy cell should show:
+  strong sub-threshold rectification (low-threshold K, KLT),
+  at most a single onset action potential to a supra-threshold step,
+  a depolarising sag on hyperpolarising steps (Ih).
 
 Usage:
   python models/avcn/validate_gbc.py \
@@ -15,11 +15,16 @@ Usage:
 Saves models/avcn/figures/gbc_iclamp_validation.png
 """
 import os
+import sys
 import argparse
 
 import numpy as np
 import neuron
 from neuron import h
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__)))))
+from recon_core import params as _P                      # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -51,7 +56,7 @@ def main():
     # first soma section for recording + injection
     soma_sec = list(h.soma)[0]
 
-    h.celsius = 34.0
+    h.celsius = _P.BODY_TEMPERATURE_C   # the pipeline temperature
     h.finitialize(-65.0)
 
     t = h.Vector().record(h._ref_t)

@@ -1,29 +1,28 @@
 #!/usr/bin/env python3
-"""Route A - nucleus positions from the Sitek et al. (2019) MNI atlas.
+"""Route A: nucleus positions from the Sitek et al. (2019) MNI atlas.
 
 Reports, per structure and side, the MNI centroid, the principal axes (PCA) and
-the volume, for each of the three modalities (bigbrain histology / post mortem
-7T MRI / in vivo 7T fMRI); the spread across modalities is the uncertainty.
+the volume for each of the three modalities (bigbrain histology, post mortem 7T
+MRI, in vivo 7T fMRI). The spread across modalities is the uncertainty.
 
-LABEL MAP.  The three volumes share one affine (0.1 mm isotropic) and one
-8-label scheme, odd = LEFT, even = RIGHT.  The atlas ships no label table, so
-the mapping below was established from the centroids themselves - the four
-target structures of the paper are separated by tens of mm and cannot be
-confused:
+Label map. The three volumes share one affine (0.1 mm isotropic) and one
+8-label scheme, odd left and even right. The atlas ships no label table, so the
+mapping below was established from the centroids themselves; the four target
+structures are tens of mm apart and cannot be confused:
 
-  1/2  z ~ -44.5, |x| ~ 13   most inferior + most lateral   -> cochlear nucleus
-  3/4  z ~ -41.2, |x| ~  7   ventral pons, medial to CN     -> superior olivary complex
-  5/6  z ~ -11.2, |x| ~  5   midbrain tectum                -> inferior colliculus
-  7/8  z ~  -5.6, |x| ~ 16   thalamic, most anterior        -> medial geniculate body
+  1/2  z ~ -44.5, |x| ~ 13   most inferior and lateral   cochlear nucleus
+  3/4  z ~ -41.2, |x| ~  7   ventral pons, medial to CN   superior olivary complex
+  5/6  z ~ -11.2, |x| ~  5   midbrain tectum              inferior colliculus
+  7/8  z ~  -5.6, |x| ~ 16   thalamic, most anterior      medial geniculate body
 
-and cross-checked against the standard human MNI coordinates for the two
+cross-checked against the standard human MNI coordinates for the two
 structures that are routinely reported: IC ~ (+-6, -34, -11) and
-MGB ~ (+-16, -26, -5).  Both match labels 5/6 and 7/8 to ~1 mm.
+MGB ~ (+-16, -26, -5). Both match labels 5/6 and 7/8 to about 1 mm.
 
-WHAT THIS ROUTE CAN AND CANNOT DO.  The SOC is a single blob: it anchors the
-complex in MNI but does not separate MSO / LSO / MNTB / SPN.  That split comes
-from route B (ANCHOR / Allen).  The CN blob is split rostro-caudally here to
-approximate the AVCN and its SBC (rostral) / GBC (caudal) subfields.
+The SOC is a single blob, so this route anchors the complex in MNI but does not
+separate MSO, LSO, MNTB and SPN; that split comes from route B (ANCHOR/Allen).
+The CN blob is split rostrocaudally here to approximate the AVCN and its SBC
+(rostral) and GBC (caudal) subfields.
 
     python ABR_reconstruction/atlas/positions_sitek.py
 """
@@ -38,15 +37,15 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(_HERE))
 sys.path.insert(0, PACKAGE_ROOT)
 
-# reconstruction/ is two levels up; adding it lets the atlas scripts share
-# the pipeline's own notion of where the repository is.
+# reconstruction/ is a couple of levels up; put it on sys.path so the atlas
+# scripts share the pipeline's own repository root.
 from recon_core.paths import REPO_ROOT                            # noqa: E402
 sys.path.insert(0, _HERE)
 
 from fetch_sitek import MNI_SPACE, cached_path, fetch  # noqa: E402
 from mni_head_transform import mni_to_head                              # noqa: E402
 
-# label -> (structure, side).  Odd = left, even = right (see module docstring).
+# label to (structure, side). Odd is left, even is right (see the docstring).
 LABEL_MAP = {
     1: ('CN', 'L'), 2: ('CN', 'R'),
     3: ('SOC', 'L'), 4: ('SOC', 'R'),
@@ -56,15 +55,14 @@ LABEL_MAP = {
 
 MODALITIES = ('bigbrain', 'postmortem', 'invivo')
 
-# Fraction of the CN blob's rostrocaudal extent taken as the AVCN.  In the human
-# CN the ventral (anteroventral + posteroventral) division occupies the rostral
-# ~2/3 of the nucleus; the AVCN proper is its rostral half.  Within the AVCN the
-# spherical-cell (SBC) field is the rostral pole and the globular (GBC) field
-# lies caudal to it - the anatomy already encoded as SBC_ROSTRAL_OFFSET_UM in
-# main_abr_avcn.py.
-# Splits are taken on QUANTILES of the voxel distribution, not on the bounding
-# extent: the in vivo ROIs are thresholded fMRI maps with a few rostral straggler
-# voxels, and an extent-based cut put 1 voxel on one side of the split.
+# Fraction of the CN blob's rostrocaudal extent taken as the AVCN. In the human
+# CN the ventral division occupies the rostral ~2/3 of the nucleus and the AVCN
+# proper is its rostral half. Within the AVCN the spherical-cell field is the
+# rostral pole and the globular field lies caudal to it, the anatomy encoded as
+# SBC_ROSTRAL_OFFSET_UM in main_abr_avcn.py.
+# Splits are taken on quantiles of the voxel distribution rather than on the
+# bounding extent: the in vivo ROIs are thresholded fMRI maps with a few
+# rostral straggler voxels, and an extent-based cut put 1 voxel on one side.
 AVCN_ROSTRAL_FRACTION = 0.50     # rostral 50% of the CN voxels = AVCN
 SBC_GBC_SPLIT = 0.50             # AVCN split at its median y: rostral = SBC, caudal = GBC
 _MIN_VOXELS = 20                 # below this a sub-blob is not reported
@@ -131,8 +129,8 @@ def analyse_modality(modality):
             continue
         pts = xyz[sel]
         # A handful of stray voxels leak across the midline in the in vivo
-        # volume (label 1 reaches x = +10.5).  Keep only the dominant
-        # hemisphere so the centroid is not dragged toward the midline.
+        # volume (label 1 reaches x = +10.5). Keep only the dominant hemisphere
+        # so the centroid is not dragged toward the midline.
         want = -1.0 if side == 'L' else 1.0
         keep = np.sign(pts[:, 0]) == want
         n_drop = int((~keep).sum())
@@ -162,7 +160,7 @@ def analyse_all(modalities=MODALITIES):
 
 
 def consensus(per_modality):
-    """Mean +- spread of the centroid across modalities, in MNI and head mm."""
+    """Mean and spread of the centroid across modalities, in MNI and head mm."""
     keys = sorted({k for m in per_modality.values() for k in m},
                   key=lambda k: (k[0], k[1]))
     out = {}
@@ -261,7 +259,7 @@ def _validate(per_modality, cons):
     print('  largest cross-modality range: %s %s = %.1f mm'
           % (worst[0][0], worst[0][1], np.linalg.norm(worst[1]['range_mm'])))
 
-    # pathway ordering: CN caudal+inferior to SOC, SOC inferior to IC, IC posterior to MGB
+    # pathway order: CN caudal and inferior to SOC, SOC inferior to IC, IC posterior to MGB
     for side in ('L', 'R'):
         cn, soc, ic, mgb = (cons[(s, side)]['centroid_mni_mm']
                             for s in ('CN', 'SOC', 'IC', 'MGB'))

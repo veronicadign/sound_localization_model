@@ -1,46 +1,47 @@
 #!/usr/bin/env python3
-"""Route B - SOC subnucleus geometry from the ANCHOR adult human brainstem.
+"""Route B: SOC subnucleus geometry from the ANCHOR adult human brainstem.
 
-ANCHOR is the only source that resolves the SOC into its subnuclei.  It has no
-stereotaxic frame, so this module produces TWO things:
+ANCHOR is the only source that resolves the SOC into its subnuclei. It has no
+stereotaxic frame, so this module produces two things:
 
   B-rel   offsets of each subnucleus from the SOC ('Superior olive') centroid,
-          in mm, in a brainstem-anatomical frame.  Independent of route A.
-  A+B     those offsets hung off the route-A (Sitek) SOC anchor, giving absolute
-          MNI / head-frame positions.  A HYBRID - never an independent estimate.
+          in mm, in a brainstem-anatomical frame. Independent of route A.
+  A+B     those offsets hung off the route-A (Sitek) SOC anchor, giving
+          absolute MNI and head-frame positions. A hybrid, never an independent
+          estimate.
 
-WHAT THE ADULT SPECIMEN ACTUALLY CARRIES (specimen 3, 54 y, bid 296; verified by
+What the adult specimen carries (specimen 3, 54 y, bid 296; verified by
 scanning all 56 annotated sections):
-    Superior olive (SO)                11 polygons, 10.4-20.0 mm   <- SOC anchor
+    Superior olive (SO)                11 polygons, 10.4-20.0 mm   (SOC anchor)
     Medial superior olive (MSO)         7 polygons, 10.4-17.3 mm
     Lateral superior olive (LSO)        4 polygons, 10.4-16.1 mm
     Superior paraolivary nucleus (SpOn) 4 polygons, 10.4-14.2 mm
     Medio-/lateroventral periolivary   13/5 polygons
     Trapezoid body (tz, the fibre tract) 7 polygons
-  NOT annotated:  trapezoid NUCLEUS (MNTB) and the cochlear nuclei.
-So route B covers MSO / LSO / SPN.  The MNTB is reported as a gap (the model
-keeps its Kulesza-derived offset), and the AVCN comes from route A, which
-already has the cochlear nucleus in MNI directly.
+  Not annotated: the trapezoid nucleus (MNTB) and the cochlear nuclei.
+So route B covers MSO, LSO and SPN. The MNTB is reported as a gap (the model
+keeps its Kulesza-derived offset) and the AVCN comes from route A, which has
+the cochlear nucleus in MNI directly.
 
-PER-SECTION ANATOMICAL FRAME.  The GeoJSON 'rotation' field (= the IIP server's
-'Vertical-views') is not a consistent anatomical correction, so the frame is
-derived from the section's own midline anatomy instead:
-    origin  = centroid of the raphe nuclei (RN)          - a midline structure
-    dorsal  = direction from RN to the ependymal zone (EZ, 4th-ventricle floor)
-              - also midline, so the RN->EZ vector IS the dorsoventral midline
+Per-section anatomical frame. The GeoJSON 'rotation' field (the IIP server's
+'Vertical-views') is not a consistent anatomical correction, so the frame comes
+from the section's own midline anatomy:
+    origin  = centroid of the raphe nuclei (RN), a midline structure
+    dorsal  = direction from RN to the ependymal zone (EZ, 4th ventricle
+              floor), also midline, so RN to EZ is the dorsoventral midline
     medial-lateral = perpendicular to it, in plane
-This is rotation-invariant and needs no metadata.  The mediolateral SIGN (which
+This is rotation invariant and needs no metadata. The mediolateral sign (which
 side is the subject's left) is not recoverable from the annotations, so lateral
-offsets are reported as magnitudes and mirrored, exactly as the model does.
+offsets are reported as magnitudes and mirrored, as the model does.
 
-THIRD AXIS.  The section's own 'mm' field is the rostrocaudal coordinate
-(increases rostrally: the midbrain sections sit at 40-48 mm).
+Third axis: the section's own 'mm' field is the rostrocaudal coordinate, which
+increases rostrally (the midbrain sections sit at 40-48 mm).
 
-PIXEL SCALE.  The IIP server exposes Max-size (160000 x 160000) but no physical
-resolution, so px->mm is calibrated against known human anatomy, two independent
-ways, and the disagreement is reported as the calibration uncertainty:
-    (1) bilateral SO separation  <-> the same distance in the route-A MNI atlas
-    (2) brainstem width at SOC level <-> the MNI152 pons width at the same level
+Pixel scale. The IIP server exposes Max-size (160000 x 160000) but no physical
+resolution, so px to mm is calibrated against known human anatomy in two
+independent ways, and the disagreement is the calibration uncertainty:
+    (1) bilateral SO separation against the same distance in the route-A atlas
+    (2) brainstem width at SOC level against the MNI152 pons width there
 
     python ABR_reconstruction/atlas/positions_anchor.py
 """
@@ -55,23 +56,23 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(_HERE))
 sys.path.insert(0, PACKAGE_ROOT)
 
-# reconstruction/ is two levels up; adding it lets the atlas scripts share
-# the pipeline's own notion of where the repository is.
+# reconstruction/ is a couple of levels up; put it on sys.path so the atlas
+# scripts share the pipeline's own repository root.
 from recon_core.paths import REPO_ROOT                            # noqa: E402
 sys.path.insert(0, _HERE)
 
 import fetch_anchor as fa                                       # noqa: E402
 from mni_head_transform import mni_to_head                      # noqa: E402
 
-# structures of interest -> the label used in the report
+# structures of interest, mapped to the label used in the report
 STRUCTURES = {
-    'SO': 'SOC',        # superior olive = the whole complex (the anchor)
+    'SO': 'SOC',        # superior olive, the whole complex (the anchor)
     'MSO': 'MSO',
     'LSO': 'LSO',
     'SpOn': 'SPN',      # superior paraolivary nucleus
     'MPoN': 'MPO',      # medioventral periolivary
     'LPoN': 'LPO',      # lateroventral periolivary
-    'tz': 'tz',         # trapezoid BODY (fibre tract) - MNTB bound, not the nucleus
+    'tz': 'tz',         # trapezoid body (fibre tract), an MNTB bound not the nucleus
 }
 MIDLINE_ORIGIN = 'RN'   # raphe nuclei
 MIDLINE_DORSAL = 'EZ'   # ependymal zone (4th ventricle floor)
@@ -88,15 +89,15 @@ CEREBELLAR = {'CB', 'mcp', 'icp', 'scp'}
 PONS_WIDTH_MM = 32.0
 PONS_WIDTH_TOL_MM = 3.0
 
-# Landmarks with an unambiguous position, used to VALIDATE the derived frame:
-# name -> (expected sign of the dorsal coordinate, expected |lateral| is small)
+# Landmarks with an unambiguous position, used to validate the derived frame:
+# name to (expected sign of the dorsal coordinate, whether |lateral| is small)
 FRAME_LANDMARKS = {
     'EZ': ('dorsal', 'midline'),      # ependymal zone / 4th-ventricle floor
     'MVe': ('dorsal', None),          # medial vestibular nucleus
     'SVe': ('dorsal', None),          # superior vestibular nucleus
     'Pn': ('ventral', None),          # pontine nuclei (basis pontis)
     'py': ('ventral', None),          # pyramidal tract
-    'RN': (None, 'midline'),          # raphe - the frame origin
+    'RN': (None, 'midline'),          # raphe, the frame origin
 }
 
 
@@ -203,7 +204,7 @@ def section_measurements(rec, geojson):
         if ac not in byac:
             continue
         v = np.array([it['centroid'] - o for it in byac[ac]])
-        # signed mean too: a midline structure drawn as a symmetric PAIR has a
+        # signed mean too: a midline structure drawn as a symmetric pair has a
         # non-zero mean |lateral| but a near-zero signed mean.
         landmarks[ac] = (float(np.mean(np.abs(v @ e_l))),
                          float(np.mean(v @ e_d)),
@@ -236,8 +237,8 @@ def collect(specimen=fa.ADULT):
 def structure_clouds(meas):
     """{acronym: {'lat_abs', 'dorsal', 'mm', 'area'} arrays} pooled over sections.
 
-    Bilateral structures contribute |lateral| (the left/right sign is not
-    recoverable from the annotations - see the module docstring).
+    Bilateral structures contribute |lateral|, since the left/right sign is not
+    recoverable from the annotations (see the module docstring).
     """
     out = {}
     for m in meas:
@@ -270,22 +271,21 @@ def structure_centroids(clouds):
 
 
 # ---------------------------------------------------------------------------
-# px -> mm calibration
+# px to mm calibration
 # ---------------------------------------------------------------------------
 def calibrate(centroids, meas, sitek_soc_mni):
-    """px -> mm scale, from two measures whose disagreement is the uncertainty.
+    """px to mm scale, from two measures whose disagreement is the uncertainty.
 
     (1) bilateral SO separation: 2 * <|lateral|> of the SO polygons in px equals
-        2 * |x| of the route-A SOC centroid in mm.  Anchored on human MNI data,
-        but by construction it forces the SOC to agree with route A, so it is not
-        an independent measure of scale.
+        2 * |x| of the route-A SOC centroid in mm. Anchored on human MNI data,
+        but by construction it forces the SOC to agree with route A, so it is
+        not an independent measure of scale.
     (2) brainstem (non-cerebellar) mediolateral width at the SOC sections equals
-        the published human caudal-pons transverse width.  Independent of route
+        the published human caudal-pons transverse width. Independent of route
         A; its own uncertainty is PONS_WIDTH_TOL_MM.
 
-    An explicit physical resolution was sought first and is NOT available: the
-    IIP server reports only Max-size (160000 x 160000), Tile-size and
-    Resolution-number for these slides.
+    An explicit physical resolution is not available: the IIP server reports
+    only Max-size (160000 x 160000), Tile-size and Resolution-number.
     """
     out = {}
 
@@ -299,8 +299,8 @@ def calibrate(centroids, meas, sitek_soc_mni):
             'basis': 'bilateral SO centroid separation vs the route-A SOC centroid',
         }
 
-    # Only the sections where the SOC SUBNUCLEI are drawn: the pons widens
-    # rostrally, so including the rostral 'SO'-only sections biases the width.
+    # Only the sections where the SOC subnuclei are drawn: the pons widens
+    # rostrally, so including the rostral SO-only sections biases the width.
     w = np.array([m['brainstem_width_px'] for m in meas
                   if ('MSO' in m['coords'] or 'LSO' in m['coords'])
                   and np.isfinite(m['brainstem_width_px'])])
@@ -325,8 +325,8 @@ def calibrate(centroids, meas, sitek_soc_mni):
 def brel_offsets(centroids, mm_per_px):
     """Offsets from the SOC ('SO') centroid, in mm, in the brainstem frame.
 
-    Axes: lateral (magnitude, away from the midline), dorsal (+ = toward the 4th
-    ventricle), rostral (+ = toward the midbrain).
+    Axes: lateral (magnitude, away from the midline), dorsal (positive toward
+    the 4th ventricle), rostral (positive toward the midbrain).
     """
     so = centroids['SO']
     out = {}
@@ -346,10 +346,10 @@ def brel_offsets(centroids, mm_per_px):
 def brainstem_to_mni_axes(soc_mni, ic_mni):
     """Unit vectors of the ANCHOR brainstem frame expressed in MNI.
 
-    rostral = the SOC -> IC direction (the ascending brainstem axis, measured
-              from route A rather than assumed);
-    lateral = MNI +x (a pitch of the neuraxis leaves the mediolateral axis alone);
-    dorsal  = rostral x lateral, i.e. toward the 4th ventricle (posterior).
+    rostral is the SOC to IC direction, the ascending brainstem axis, measured
+    from route A rather than assumed; lateral is MNI +x, since a pitch of the
+    neuraxis leaves the mediolateral axis alone; dorsal is rostral x lateral,
+    pointing toward the 4th ventricle (posterior).
     """
     e_r = np.asarray(ic_mni, float) - np.asarray(soc_mni, float)
     e_r = e_r / np.linalg.norm(e_r)
@@ -363,11 +363,11 @@ def brainstem_to_mni_axes(soc_mni, ic_mni):
 
 
 def hybrid_positions(offsets, soc_mni_by_side, ic_mni):
-    """A+B: route-A SOC anchor + route-B offsets -> MNI and head-frame, per side."""
+    """A+B: route-A SOC anchor plus route-B offsets, in MNI and head frame."""
     out = {}
     for side, soc in soc_mni_by_side.items():
         e_l, e_d, e_r = brainstem_to_mni_axes(soc, ic_mni)
-        sgn = 1.0 if side == 'R' else -1.0        # lateral magnitude -> side
+        sgn = 1.0 if side == 'R' else -1.0        # lateral magnitude to side
         for label, o in offsets.items():
             mni = (np.asarray(soc, float)
                    + sgn * o['d_lateral_mm'] * e_l
@@ -537,7 +537,7 @@ def _validate(cents, offsets, mm_per_px, hyb, meas):
         elif want_dv == 'ventral':
             good = dor < 0
         if want_mid == 'midline':
-            # symmetric pairs -> judge on the SIGNED mean, not the mean modulus
+            # symmetric pairs: judge on the signed mean, not the mean modulus
             good = good and abs(lat_signed) < 1.5
         if not good:
             ok = False

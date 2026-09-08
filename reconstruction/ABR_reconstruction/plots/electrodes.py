@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-Per-nucleus scalp ABR at Cz, M1 and M2 — one figure per generator.
+Per-nucleus scalp ABR at Cz, M1 and M2, one figure per generator.
 
-Two sources of the same picture, selected by `--filter`:
+Two sources of the same picture, selected by --filter:
 
-  `--filter band`  (default) read the stored, band-passed `ABR.h5`
-  `--filter none`  re-project the RAW head-frame dipole records through the same
-                   4-sphere model WITHOUT the band-pass.  The stored traces are
-                   already filtered and that cannot be undone, so an unfiltered
-                   view has to be rebuilt from the dipoles.
+  --filter band  (default) read the stored, band-passed ABR.h5
+  --filter none  re-project the raw head-frame dipole records through the same
+                 4-sphere model without the band-pass. The stored traces are
+                 already filtered and that cannot be undone, so an unfiltered
+                 view has to be rebuilt from the dipoles.
 
-`--validate` re-applies each nucleus's own band to the unfiltered projection and
-checks it reproduces the stored `ABR.h5`.  That is the end-to-end gate on the
-whole ABR chain: if projection-then-filter does not equal what the producer
-wrote, the two have diverged.
+--validate re-applies each nucleus's own band to the unfiltered projection and
+checks it reproduces the stored ABR.h5. That is the end-to-end gate on the ABR
+chain: if projection then filter does not equal what the producer wrote, the
+two have diverged.
 
 Usage:
   python ABR_reconstruction/plots/electrodes.py --pic-file RESULTS/<f>.pic
@@ -37,31 +37,42 @@ from recon_core import head_model, io_utils, params as P, paths
 from recon_core.signal_utils import bandpass, time_axis
 from ABR_reconstruction.plots import common
 
-# Each generator: how its dipole records are named, which stored ABR.h5 holds it,
-# under which dataset key, and the band that producer used.
-GENERATORS = [
-    # stem            label             dipole (nucleus, generator)      dir prefix  key          band
-    ('mso', 'MSO', [('MSO', 'postsynaptic')], None, 'data', P.BAND_TOLNAI),
-    ('lso', 'LSO', [('LSO', 'spiking')], 'lso', 'data', P.BAND_TOLNAI),
-    ('mntb', 'MNTB', [('MNTB', 'principal'), ('MNTB', 'calyx')], 'mntb',
-     'composite', P.BAND_CLINICAL),
-    ('avcn_combined', 'AVCN (GBC+SBC)', [('AVCN', 'GBC'), ('AVCN', 'SBC')], 'avcn',
-     'composite', P.BAND_CLINICAL),
-    ('avcn_gbc', 'AVCN GBC', [('AVCN', 'GBC')], 'avcn', 'GBC', P.BAND_CLINICAL),
-    ('avcn_sbc', 'AVCN SBC', [('AVCN', 'SBC')], 'avcn', 'SBC', P.BAND_CLINICAL),
-]
+def generators(lso_generator='synaptic'):
+    """Each generator: how its dipole records are named, which stored ABR.h5
+    holds it, under which dataset key and directory suffix, and the band that
+    producer used.
+
+    The LSO row follows lso_generator: spiking and synaptic are alternative
+    models of the same cells, never summed, written by different runs into
+    different directories (main_abr_lso.py tags the synaptic one _syn).
+    """
+    lso_suffix = '' if lso_generator == 'spiking' else '_syn'
+    return [
+        # key            label             dipole (nucleus, generator)     prefix  key         band              suffix
+        ('mso', 'MSO', [('MSO', 'postsynaptic')], None, 'data', P.BAND_TOLNAI, ''),
+        ('lso', 'LSO', [('LSO', lso_generator)], 'lso', 'data', P.BAND_TOLNAI,
+         lso_suffix),
+        ('mntb', 'MNTB', [('MNTB', 'principal'), ('MNTB', 'calyx')], 'mntb',
+         'composite', P.BAND_CLINICAL, ''),
+        ('avcn_combined', 'AVCN (GBC+SBC)', [('AVCN', 'GBC'), ('AVCN', 'SBC')],
+         'avcn', 'composite', P.BAND_CLINICAL, ''),
+        ('avcn_gbc', 'AVCN GBC', [('AVCN', 'GBC')], 'avcn', 'GBC',
+         P.BAND_CLINICAL, ''),
+        ('avcn_sbc', 'AVCN SBC', [('AVCN', 'SBC')], 'avcn', 'SBC',
+         P.BAND_CLINICAL, ''),
+    ]
 
 FULL_NAME = {'Cz': 'Cz (vertex)', 'M1': 'M1 (left mastoid)',
              'M2': 'M2 (right mastoid)'}
 
 
-def project_unfiltered(stem, angle, generators, electrodes):
-    """Sum the raw dipole records at the scalp, in µV, with NO band-pass.
+def project_unfiltered(stem, cond_label, generators, electrodes):
+    """Sum the raw dipole records at the scalp, in µV, with no band-pass.
 
-    Exactly `head_model.superpose_sources` minus the filter, so the two stay
-    comparable — that is what makes `--validate` meaningful.
+    Exactly head_model.superpose_sources minus the filter, so the two stay
+    comparable, which is what makes --validate meaningful.
     """
-    directory = paths.dipoles_dir_for(stem, angle)
+    directory = paths.dipoles_dir_for(stem, cond_label)
     sources, srate = [], None
     for nucleus, generator in generators:
         for side in ('L', 'R'):
@@ -100,17 +111,17 @@ def plot(label, t_ms, traces, electrodes, out_png, filtered):
     common.save(fig, out_png, dpi=170)
 
 
-def validate(stem, angle, electrodes):
+def validate(stem, cond, electrodes, gens):
     """Re-filter the projection and compare with what the producer stored."""
     ok = True
-    for _key, label, generators, prefix, dataset, band in GENERATORS:
-        V_raw, srate = project_unfiltered(stem, angle, generators, electrodes)
+    for _key, label, sources, prefix, dataset, band, suffix in gens:
+        V_raw, srate = project_unfiltered(stem, cond, sources, electrodes)
         if V_raw is None:
             print(f'[{label:16s}] missing dipole records -> skip')
             ok = False
             continue
         stored = common.load_trace(
-            common.abr_dir(stem, f'angle{angle}', 'both', prefix=prefix),
+            common.abr_dir(stem, cond, 'both', prefix=prefix, suffix=suffix),
             key=dataset)
         if stored is None:
             print(f'[{label:16s}] missing stored ABR.h5 -> skip')
@@ -136,38 +147,44 @@ def main():
                     help='band = stored band-passed traces; none = re-project raw dipoles')
     ap.add_argument('--validate', action='store_true',
                     help='check projection+filter reproduces the stored ABR.h5')
+    ap.add_argument('--lso-generator', choices=['spiking', 'synaptic'],
+                    default='synaptic', dest='lso_generator',
+                    help='which LSO model to show; they are alternatives, never '
+                         'summed, and live in different output directories')
     args = ap.parse_args()
 
     stem = common.resolve_stem(args)
+    cond = common.resolve_condition(args)
     electrodes = common.ELECTRODES
+    gens = generators(args.lso_generator)
 
     if args.validate:
-        sys.exit(0 if validate(stem, args.angle, electrodes) else 1)
+        sys.exit(0 if validate(stem, cond, electrodes, gens) else 1)
 
     out_dir = args.out or os.path.join(
         paths.RESULTS_DIR, 'cz_m1_m2' + ('' if args.filter == 'band' else '_nofilter'))
     os.makedirs(out_dir, exist_ok=True)
 
-    for key, label, generators, prefix, dataset, _band in GENERATORS:
+    for key, label, sources, prefix, dataset, _band, dir_suffix in gens:
         if args.filter == 'band':
             loaded = common.load_trace(
-                common.abr_dir(stem, f'angle{args.angle}', 'both', prefix=prefix),
-                key=dataset)
+                common.abr_dir(stem, cond, 'both', prefix=prefix,
+                               suffix=dir_suffix), key=dataset)
             if loaded is None:
                 print(f'[{label}] no stored {dataset} trace -> skip')
                 continue
             V, names, srate = loaded
             traces = [V[names.index(e)] for e in electrodes]
-            suffix = ''
+            name_suffix = ''
         else:
-            V, srate = project_unfiltered(stem, args.angle, generators, electrodes)
+            V, srate = project_unfiltered(stem, cond, sources, electrodes)
             if V is None:
                 print(f'[{label}] missing dipole records -> skip')
                 continue
             traces = list(V)
-            suffix = '_nofilter'
+            name_suffix = '_nofilter'
         plot(label, time_axis(len(traces[0]), srate), traces, electrodes,
-             os.path.join(out_dir, f'cz_m1_m2_{key}{suffix}.png'),
+             os.path.join(out_dir, f'cz_m1_m2_{key}{name_suffix}.png'),
              filtered=args.filter == 'band')
 
 

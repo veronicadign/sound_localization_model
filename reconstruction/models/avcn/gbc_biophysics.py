@@ -1,38 +1,36 @@
 """
 Biophysical decoration for globular bushy cell (GBC) morphologies.
 
-Ports the cnmodel XM13_nacncoop (mouse, Type II) channel densities onto a NEURON
-morphology that uses the cnmodel SectionList naming convention
-(soma / primarydendrite / secondarydendrite / hillock / unmyelinatedaxon /
-myelinatedaxon).  Works both:
+Ports the cnmodel XM13_nacncoop (mouse, Type II) channel densities onto a
+NEURON morphology using the cnmodel SectionList naming convention (soma,
+primarydendrite, secondarydendrite, hillock, unmyelinatedaxon, myelinatedaxon).
+Works both standalone, after h.load_file('.../bushy_stick.hoc') for validation,
+and inside LFPy, passed as LFPy.Cell(custom_fun=[decorate_gbc]).
 
-  * standalone   — after ``h.load_file('.../bushy_stick.hoc')``  (validation), and
-  * as an LFPy   — passed via ``LFPy.Cell(custom_fun=[decorate_gbc])``  (Phase 2 LFP).
-
-Reference conductances are given as TOTAL nS (cnmodel data table
-``XM13nacncoop_channels`` / ``..._compartments`` in
-external/cnmodel/cnmodel/data/ionchannels.py).  Following cnmodel, they are
-converted to a somatic density (S/cm^2) using the *actual* soma surface area of
-the loaded morphology, then scaled per compartment.  This makes the same
-function valid for the stick stand-in and for the real EM reconstruction.
+Reference conductances are total nS (cnmodel data table XM13nacncoop_channels
+and ..._compartments in external/cnmodel/cnmodel/data/ionchannels.py).
+Following cnmodel they are converted to a somatic density (S/cm^2) using the
+actual soma surface area of the loaded morphology, then scaled per compartment,
+so the same function is valid for the stick stand-in and the real EM
+reconstruction.
 
 Channels (compiled in models/avcn/x86_64): klt, kht, ihvcn, leak, nacncoop.
 """
 
 from neuron import h
 
-# --- XM13_nacncoop reference (soma) conductances, mouse.  Units: nS. -----------
+# --- XM13_nacncoop reference (soma) conductances, mouse, in nS ---------------
 #     source: ionchannels.py add_table_data('XM13nacncoop_channels', ...)
-# NOTE: klt/kht are renamed kltbc/khtbc (unique SUFFIX) so this mechanism set
-# coexists with the MSO/LSO klt/kht that NEURON auto-loads from the repo-root
-# x86_64.  leak/ihvcn/nacncoop names are already unique.
+# klt/kht are renamed kltbc/khtbc (unique SUFFIX) so this mechanism set coexists
+# with the MSO/LSO klt/kht that NEURON auto-loads from the repo-root x86_64.
+# leak/ihvcn/nacncoop names are already unique.
 #
-# Two model types, differing ONLY in nacncoop + kltbc (ka_gbar = 0 in both, so no
-# extra mechanism):
-#   II   — globular bushy cell (GBC), the phasic Type-II profile.
-#   II-I — spherical bushy cell (SBC): less KLT and less Na → higher input
-#          resistance, longer tau, shallower Ih sag, more spikes (Jing et al.
-#          2025, Atoh7+ vs Hhip+).
+# Two model types, differing only in nacncoop and kltbc (ka_gbar = 0 in both,
+# so no extra mechanism):
+#   II    globular bushy cell (GBC), the phasic Type II profile.
+#   II-I  spherical bushy cell (SBC): less KLT and less Na, so higher input
+#         resistance, longer tau, shallower Ih sag and more spikes (Jing et al.
+#         2025, Atoh7+ vs Hhip+).
 REF_NS_II = {
     'nacncoop': 3000.0,
     'khtbc':      58.0,
@@ -54,12 +52,12 @@ REF_NS = REF_NS_II
 #     source: add_table_data('XM13nacncoop_channels_compartments', ...)
 #     Column order maps to cnmodel SectionList names below.
 #
-# 'node'/'internode' are for the SYNTHETIC extended active axon (GBC traveling
-# wave, models/avcn/axon_builder.py) — NOT from the cnmodel table:
-#   node     — active node of Ranvier: very high Na (regenerates the AP) + fast
-#              Kv3 (khtbc) repolarisation; enables saltatory conduction.
-#   internode— myelinated, passive: no active channels, tiny leak (high Rm) and
-#              a reduced capacitance CM_MYELIN (see below).
+# 'node' and 'internode' are for the synthetic extended active axon (the GBC
+# travelling wave, models/avcn/axon_builder.py), not from the cnmodel table:
+#   node       active node of Ranvier: very high Na to regenerate the AP plus
+#              fast Kv3 (khtbc) repolarisation, giving saltatory conduction.
+#   internode  myelinated and passive: no active channels, a tiny leak (high
+#              Rm) and the reduced capacitance CM_MYELIN (see below).
 SCALE = {
     #             soma  hillock  initialsegment  unmyel  myel   primdend secdend  node internode
     'nacncoop': {'soma': 1.0, 'hillock': 5.0, 'initialsegment': 5.0, 'unmyelinatedaxon': 3.0,
@@ -88,9 +86,9 @@ RA     = 150.0    # ohm*cm
 CM     = 0.9      # uF/cm^2  (cnmodel membrane cap for mouse bushy)
 CM_MYELIN = 0.02  # uF/cm^2  (myelinated internode: ~1/45 of unmyelinated membrane)
 
-# Map every known hoc SectionList name -> cnmodel compartment class.
-# Covers both the cnmodel stick (names == classes) and the Dryad EM
-# reconstructions (syGlass SectionList names, e.g. Proximal_Dendrite).
+# Map every known hoc SectionList name to a cnmodel compartment class.
+# Covers both the cnmodel stick (names equal classes) and the Dryad EM
+# reconstructions (syGlass SectionList names such as Proximal_Dendrite).
 COMPARTMENT_OF = {
     # cnmodel stick (identity)
     'soma': 'soma', 'hillock': 'hillock', 'unmyelinatedaxon': 'unmyelinatedaxon',
@@ -109,9 +107,9 @@ COMPARTMENT_OF = {
     'Internode': 'internode',
 }
 
-# Fractional weights for biophysically realistic endbulb placement:
-# 70% soma (large endbulbs engulf cell body), 20% proximal dendrite/hubs,
-# 10% axon hillock + AIS (at least one endbulb extends onto the initial segment).
+# Fractional weights for realistic endbulb placement: 70% soma (large endbulbs
+# engulf the cell body), 20% proximal dendrite and hubs, 10% hillock and AIS
+# (at least one endbulb extends onto the initial segment).
 ENDBULB_COMPARTMENT_WEIGHTS = {
     'soma':            0.70,
     'primarydendrite': 0.20,
@@ -121,18 +119,18 @@ ENDBULB_COMPARTMENT_WEIGHTS = {
 
 
 def weighted_endbulb_idx(cell, n, weights=None):
-    """Return n segment indices for endbulb placement weighted by compartment.
+    """Return n segment indices for endbulb placement, weighted by compartment.
 
     weights : dict or None
-        Compartment-class -> fraction. ``None`` uses the GBC default
-        (``ENDBULB_COMPARTMENT_WEIGHTS``, 70/20/5/5). Pass an override for the
-        SBC (few large axosomatic endbulbs, e.g. {'soma':0.85,
-        'primarydendrite':0.15}).
+        Compartment class to fraction. None uses the GBC default
+        (ENDBULB_COMPARTMENT_WEIGHTS, 70/20/5/5). Pass an override for the SBC,
+        which has few large axosomatic endbulbs, e.g.
+        {'soma': 0.85, 'primarydendrite': 0.15}.
     """
     import numpy as np
     weights = dict(weights if weights is not None else ENDBULB_COMPARTMENT_WEIGHTS)
     segs = {cls: seg_idx_for_classes(cell, (cls,)) for cls in weights}
-    # missing compartments → redistribute fraction to soma
+    # missing compartments: redistribute the fraction to soma
     for cls in list(weights):
         if len(segs.get(cls, [])) == 0 and cls != 'soma':
             weights['soma'] += weights.pop(cls)
@@ -152,10 +150,10 @@ def _section_area_um2(sec):
 
 
 def _classify_sections():
-    """Map each Section -> its cnmodel compartment class via the hoc SectionLists.
+    """Map each Section to its cnmodel compartment class via the hoc SectionLists.
 
-    Returns dict {sec_hoc_name: compartment_class}. Sections not in any list
-    default to 'soma' (safe: full density).
+    Returns {sec_hoc_name: compartment_class}. Sections not in any list default
+    to 'soma', which is safe since it gets full density.
     """
     cls = {}
     for name, comp in COMPARTMENT_OF.items():
@@ -168,7 +166,7 @@ def _classify_sections():
 
 
 def seg_idx_for_classes(cell, classes):
-    """LFPy segment indices whose section maps to one of the given compartment classes."""
+    """LFPy segment indices whose section is in one of the compartment classes."""
     import numpy as np
     compartment_of = _classify_sections()
     idx = []
@@ -181,19 +179,19 @@ def seg_idx_for_classes(cell, classes):
             else np.array([], dtype='int32'))
 
 
-# Axon compartment classes in priority order.  'internode' first: when a
+# Axon compartment classes in priority order. 'internode' first: when a
 # synthetic extended axon is present (axon_builder) that mm-scale tract is the
 # physically meaningful long axis and gives a far more robust direction than the
-# ~18 um EM stub.  Otherwise the myelinated axon, then AIS, then hillock (for
-# cells lacking a myelinated segment, e.g. VCN_c02 or the truncated SBC).
+# ~18 um EM stub. Otherwise the myelinated axon, then AIS, then hillock, for
+# cells lacking a myelinated segment such as VCN_c02 or the truncated SBC.
 _AXON_CLASS_PRIORITY = ('internode', 'myelinatedaxon', 'initialsegment', 'hillock')
 
 
 def native_axon_direction(cell):
-    """Unit vector soma-centroid -> axon-centroid for the loaded cell (LFPy coords).
+    """Unit vector from soma centroid to axon centroid, in LFPy coordinates.
 
-    Uses the highest-priority axon compartment class present. Returns None if the
-    morphology has no axon compartment at all.
+    Uses the highest-priority axon compartment class present. Returns None if
+    the morphology has no axon compartment at all.
     """
     import numpy as np
     soma_idx = seg_idx_for_classes(cell, ('soma',))
@@ -214,13 +212,14 @@ def native_axon_direction(cell):
 
 
 def lfpy_align_angles(v_native, v_target):
-    """LFPy set_rotation angles {'x','y','z'} that rotate v_native onto v_target.
+    """LFPy set_rotation angles {'x','y','z'} rotating v_native onto v_target.
 
-    LFPy set_rotation(order='xyz') transforms row-vector coords as pos·Rx·Ry·Rz
+    LFPy set_rotation(order='xyz') transforms row-vector coords as pos.Rx.Ry.Rz
     with each elementary angle negated (LFPy/cell.py). So for column vectors the
-    applied matrix is M = (Rx·Ry·Rz)^T, and we need M·v_native = v_target.
-    We build M via Rodrigues (align v_native->v_target), decompose (Rx·Ry·Rz) =
-    M^T with scipy 'XYZ' intrinsic Euler, then negate to get LFPy's (x,y,z).
+    applied matrix is M = (Rx.Ry.Rz)^T and we need M.v_native = v_target. M is
+    built with Rodrigues (aligning v_native to v_target), then (Rx.Ry.Rz) = M^T
+    is decomposed with scipy 'XYZ' intrinsic Euler and negated to give LFPy's
+    (x, y, z).
     """
     import numpy as np
     from scipy.spatial.transform import Rotation
@@ -231,14 +230,14 @@ def lfpy_align_angles(v_native, v_target):
     if np.linalg.norm(v) < 1e-12:            # parallel or anti-parallel
         if c > 0:
             M = np.eye(3)
-        else:                                 # 180°: rotate about any ⟂ axis
+        else:                                 # 180 deg: rotate about any perpendicular axis
             perp = np.array([1., 0., 0.]) if abs(a[0]) < 0.9 else np.array([0., 1., 0.])
             axis = np.cross(a, perp); axis /= np.linalg.norm(axis)
             M = Rotation.from_rotvec(np.pi * axis).as_matrix()
     else:
         vx = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
         M = np.eye(3) + vx + vx @ vx * (1.0 / (1.0 + c))
-    # M applies to column vectors: M·a = b. LFPy applies (Rx·Ry·Rz) = M^T.
+    # M applies to column vectors: M.a = b. LFPy applies (Rx.Ry.Rz) = M^T.
     ax, ay, az = Rotation.from_matrix(M.T).as_euler('XYZ')
     return {'x': -ax, 'y': -ay, 'z': -az}
 
@@ -249,15 +248,14 @@ def decorate_gbc(cell=None, set_nseg=True, verbose=False, ref_ns=None):
     Parameters
     ----------
     cell : LFPy.Cell or None
-        Unused placeholder so this can be passed as an LFPy ``custom_fun``
-        (LFPy calls it with the cell instance). Decoration acts on all NEURON
+        Unused placeholder so this can be passed as an LFPy custom_fun, which
+        LFPy calls with the cell instance. Decoration acts on all NEURON
         sections currently instantiated.
     set_nseg : bool
         If True, set an odd nseg per section via the d_lambda rule (100 Hz).
     ref_ns : dict or None
-        Reference somatic conductances (nS). ``None`` -> ``REF_NS_II`` (GBC,
-        Type II), preserving the original behaviour; pass ``REF_NS_II_I`` for
-        the spherical bushy cell (Type II-I).
+        Reference somatic conductances (nS). None gives REF_NS_II (GBC, Type
+        II); pass REF_NS_II_I for the spherical bushy cell (Type II-I).
     """
     if ref_ns is None:
         ref_ns = REF_NS_II

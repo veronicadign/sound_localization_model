@@ -1,11 +1,10 @@
 """
-MPI and NEURON-mechanism boilerplate.
+MPI and NEURON mechanism boilerplate.
 
-Every pipeline runs the same way under `mpiexec`: rank 0 extracts spikes from the
-`.pic` (a slow, single-writer step), broadcasts the resulting metadata, and all
-ranks then simulate their share of the population.  That handshake, and the
-"mechanisms may already be loaded" dance NEURON requires when several model
-directories are pulled in, were each copied into every entry point.
+Every pipeline runs the same way under mpiexec: rank 0 extracts spikes from the
+.pic (a slow, single-writer step), broadcasts the resulting metadata, and all
+ranks then simulate their share of the population. That handshake and the
+repeated-mechanism-load handling live here instead of in every entry point.
 """
 
 import neuron
@@ -24,8 +23,8 @@ def load_mechanisms(*directories):
     """Load compiled NEURON mechanisms, tolerating repeated loads.
 
     Importing two model packages that share a mechanism (MNTB reuses the MSO
-    `klt`/`kht`/`ih`) makes NEURON raise on the second load; that specific error
-    is benign and is the only one swallowed here.
+    klt/kht/ih) makes NEURON raise on the second load. That specific error is
+    benign and is the only one swallowed here.
     """
     for directory in directories:
         try:
@@ -35,10 +34,22 @@ def load_mechanisms(*directories):
                 raise
 
 
-def broadcast_from_root(compute):
-    """Run `compute()` on rank 0 only, broadcast its result, then barrier.
+def set_temperature(celsius):
+    """Set NEURON's global simulation temperature.
 
-    Used for spike extraction: the `.pic` is hundreds of MB and the GDF files are
+    Call it wherever mechanisms are loaded: temperature-scaled mechanisms read
+    celsius when their rates are computed, so it has to be right before the
+    first finitialize. NEURON defaults to 6.3 degC, which is not a body
+    temperature and not what these channels were fitted at.
+    """
+    neuron.h.celsius = float(celsius)
+    return neuron.h.celsius
+
+
+def broadcast_from_root(compute):
+    """Run compute() on rank 0 only, broadcast its result, then barrier.
+
+    Used for spike extraction: the .pic is hundreds of MB and the GDF files are
     a shared cache, so exactly one rank may produce them.
     """
     payload = compute() if is_root() else None
@@ -48,10 +59,10 @@ def broadcast_from_root(compute):
 
 
 def reduce_sum(local, root=0):
-    """Element-wise sum of an array across ranks; non-root ranks get `None`.
+    """Element-wise sum of an array across ranks; non-root ranks get None.
 
-    The population dipole is a sum over cells, and the cells are split across
-    ranks, so the total only exists after this reduction.
+    The population dipole is a sum over cells split across ranks, so the total
+    only exists after this reduction.
     """
     import numpy as np
 

@@ -1,22 +1,20 @@
 """
 Base class shared by every nucleus's hybridLFPy population.
 
-All five populations (MSO, LSO, AVCN GBC/SBC, MNTB, and the calyx) answer the same
-three questions, and used to answer them with four near-identical copies of the
-same code:
+All five populations (MSO, LSO, AVCN GBC/SBC, MNTB and the calyx) answer the
+same three questions:
 
-`get_all_SpCells`      which presynaptic cells drive this postsynaptic cell?
-`insert_all_synapses`  where on the morphology do their synapses land?
-`draw_rand_pos`        where in the nucleus does each cell sit?
+get_all_SpCells      which presynaptic cells drive this postsynaptic cell?
+insert_all_synapses  where on the morphology do their synapses land?
+draw_rand_pos        where in the nucleus does each cell sit?
 
-Only the *answers* differ, so only the answers are overridden here. Subclasses
-provide `N_POST_TOTAL`, a synapse-placement rule, and a nucleus geometry.
+Only the answers differ, so only the answers are overridden. Subclasses
+provide N_POST_TOTAL, a synapse placement rule and a nucleus geometry.
 
-RANDOM-NUMBER ORDERING IS PART OF THE CONTRACT.  Cell positions and synapse
-placement are drawn from the global NumPy generator, so the *order* of draws
-determines the result. `rejection_sample_ellipse` therefore takes an explicit
-`sample_order` rather than assuming one: the LSO samples x, z, y while the others
-sample x, y, z, and collapsing that difference would silently move every LSO cell.
+The order of random draws is part of the contract. Cell positions and synapse
+placement come from the global NumPy generator, so draw order decides the
+result. rejection_sample_ellipse therefore takes an explicit sample_order: the
+LSO samples x, z, y while the others sample x, y, z.
 """
 
 import numpy as np
@@ -24,35 +22,35 @@ from hybridLFPy.population import Population
 
 
 class ReconstructionPopulation(Population):
-    """hybridLFPy `Population` with the pipeline's shared wiring and placement."""
+    """hybridLFPy Population with the pipeline's shared wiring and placement."""
 
-    #: Synapse parameters per presynaptic population name (from `recon_core.params`).
+    #: Synapse parameters per presynaptic population name (from recon_core.params).
     PER_POP_SYN = {}
 
-    #: Cells per side in the NEST model — the tonotopic axis this population maps onto.
+    #: Cells per side in the NEST model, the tonotopic axis this population maps onto.
     N_POST_TOTAL = None
 
     #: Skip layers that received no synapses. The MSO alone processes them, because
     #: its non-SBC inputs use hybridLFPy's own layer indices unmodified.
     SKIP_EMPTY_LAYERS = True
 
-    #: Synapses per presynaptic population when `n_syn_per_pop` does not name one.
+    #: Synapses per presynaptic population when n_syn_per_pop does not name one.
     DEFAULT_N_SRC = 1
 
     def __init__(self, n_syn_per_pop=None, per_pop_syn=None, **kwargs):
         self.n_syn_per_pop = n_syn_per_pop or {}
-        # Instance-level override so one class can serve two cell types that differ
-        # only in their synapses (the AVCN globular and spherical bushy cells).
+        # Instance-level override so one class can serve two cell types that
+        # differ only in their synapses (the AVCN globular and spherical cells).
         self.per_pop_syn = per_pop_syn if per_pop_syn is not None else self.PER_POP_SYN
         super().__init__(**kwargs)
 
     # -- presynaptic assignment ---------------------------------------------
     def post_index(self, cellindex):
-        """Simulated cell index -> its tonotopic index in the full NEST population.
+        """Tonotopic index in the full NEST population of simulated cell i.
 
-        A run with `--n-cells 200` stands in for all `N_POST_TOTAL` cells, so cell
-        *i* of the sample represents the cell at this position along the tonotopic
-        axis, and must receive the inputs that cell would have received.
+        A run with --n-cells 200 stands in for all N_POST_TOTAL cells, so cell i
+        of the sample represents the cell at this position along the tonotopic
+        axis and must receive the inputs that cell would have received.
         """
         n_sim = self.POPULATION_SIZE
         if n_sim <= 1:
@@ -67,9 +65,9 @@ class ReconstructionPopulation(Population):
         """Tonotopic presynaptic assignment, mirroring the NEST x_to_one connector.
 
         Each postsynaptic cell draws its inputs from a contiguous window of the
-        presynaptic population, positioned by its own tonotopic index — so a cell
-        tuned to 1 kHz is driven by 1 kHz fibres, exactly as in the NEST run whose
-        spikes are being replayed.
+        presynaptic population, positioned by its own tonotopic index, so a cell
+        tuned to 1 kHz is driven by 1 kHz fibres as in the NEST run being
+        replayed.
         """
         span = max(self.presynaptic_span() - 1, 1)
         SpCells = {}
@@ -101,9 +99,9 @@ class ReconstructionPopulation(Population):
     def select_synapse_idx(self, cell, pop_type, idx, layer):
         """Where this input's synapses go on the morphology.
 
-        Default: hybridLFPy's own layer-based indices, unchanged.  Subclasses
-        override to place by section name instead — which is what lets a nucleus
-        whose somas spread along the depth axis still target dendrites and somata
+        Default: hybridLFPy's own layer-based indices, unchanged. Subclasses
+        override to place by section name instead, which lets a nucleus whose
+        somas spread along the depth axis still target dendrites and somata
         correctly (a fixed depth band would miss most cells).
         """
         return idx
@@ -133,14 +131,14 @@ class ReconstructionPopulation(Population):
         """Uniformly fill an elliptic cylinder, then enforce a minimum spacing.
 
         extents      {axis: (lo, hi)} bounding box, one entry per axis
-        sample_order the order the axes consume random numbers — see the module
+        sample_order the order the axes consume random numbers, see the module
                      docstring; changing it changes every drawn position
-        ellipse_axes the two axes forming the elliptic cross-section; the third is
-                     the cylinder's long axis and is bounded by its extent alone
-        sort_axis    somas are returned ordered along this axis, so that cell index
-                     order IS tonotopic order (what `post_index` assumes)
+        ellipse_axes the two axes forming the elliptic cross-section; the third
+                     is the cylinder's long axis, bounded by its extent alone
+        sort_axis    somas are returned ordered along this axis, so cell index
+                     order is tonotopic order (what post_index assumes)
 
-        Returns hybridLFPy's `[{'x':…, 'y':…, 'z':…}, …]`.
+        Returns hybridLFPy's [{'x':..., 'y':..., 'z':...}, ...].
         """
         n_cells = self.POPULATION_SIZE
         centres = {a: 0.5 * (lo + hi) for a, (lo, hi) in extents.items()}
@@ -148,13 +146,13 @@ class ReconstructionPopulation(Population):
 
         def draw(n):
             drawn = {}
-            for axis in sample_order:          # order matters — see docstring
+            for axis in sample_order:          # order matters, see docstring
                 lo, hi = extents[axis]
-                # Written as (u - 0.5) * width + centre, NOT u * width + lo: the two
-                # are equal in exact arithmetic but round differently, and the
-                # difference propagates through the rejection loop into which cells
-                # get resampled. This form reproduces the per-nucleus samplers it
-                # replaced bit for bit.
+                # Written as (u - 0.5) * width + centre, not u * width + lo: the
+                # two are equal in exact arithmetic but round differently, and
+                # the difference propagates through the rejection loop into
+                # which cells get resampled. This form reproduces the per-nucleus
+                # samplers it replaced bit for bit.
                 drawn[axis] = (np.random.rand(n) - 0.5) * (hi - lo) + centres[axis]
             return drawn
 

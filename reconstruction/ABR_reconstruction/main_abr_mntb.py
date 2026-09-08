@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
 """
-MNTB ABR reconstruction: current-dipole moment -> 4-sphere head model.
+MNTB ABR reconstruction: current dipole moment through the 4-sphere head model.
 
 Two co-located generators, each a whole-cell CurrentDipoleMoment summed at the
-scalp (exact linear superposition; the SBC+GBC composite pattern of
-main_abr_avcn.py):
-  * PRINCIPAL — MNTB principal cell, calyx-EPSC somatodendritic sink.
-  * CALYX     — calyx of Held presynaptic terminal, the "prespike" (leads by
-                ~0.5 ms; the postsynaptic sink carries the GBCs2MNTBCs delay).
+scalp, following the SBC+GBC composite pattern of main_abr_avcn.py:
+  PRINCIPAL   MNTB principal cell, the calyx EPSC somatodendritic sink.
+  CALYX       calyx of Held presynaptic terminal, the prespike, leading by
+              ~0.5 ms since the postsynaptic sink carries the GBCs2MNTBCs delay.
 
-Both are driven by the CONTRALATERAL GBC spike train and placed at the MNTB
-position (~400 µm from the midline, medial + anterior to the MSO).
+Both are driven by the contralateral GBC spike train and placed at the MNTB
+position (~400 µm from the midline, medial and anterior to the MSO).
 
-NON-DOUBLE-COUNTING: the GBC axon crossing the midline — the DOMINANT wave-III
-generator (Karadas 2021) — is modelled in the AVCN GBC ABR
-(main_abr_avcn.py, VCN_c09_extended_axon.hoc) and is NOT re-added here. The MNTB's
-own contribution (closed-field soma + the radial calyx current) is expected small.
+The GBC axon crossing the midline, the dominant wave-III generator (Karadas
+2021), is modelled in the AVCN GBC ABR (main_abr_avcn.py,
+VCN_c09_extended_axon.hoc) and is not re-added here, so nothing is counted
+twice. The MNTB's own contribution (closed-field soma plus the radial calyx
+current) is expected to be small.
 
 CLI:
   mpiexec -n 4 python ABR_reconstruction/main_abr_mntb.py --pic-file RESULTS/<f>.pic \
       --angle 0 --side both --n-cells 200 [--generators principal|calyx|both]
 
-Outputs -> RESULTS/abr_tmp/output_mntb_{stem}_angle{A}_{sidespec}/
-           ABR.h5 (principal + calyx + composite), figures/mntb_abr.png
+Outputs go to RESULTS/abr_tmp/output_mntb_{stem}_angle{A}_{sidespec}/:
+  ABR.h5 (principal, calyx and composite), figures/mntb_abr.png
 """
 import os
 import sys
@@ -54,10 +54,10 @@ V_INIT = P.MNTB_V_INIT
 N_MNTB_TOTAL = P.N_MNTB_TOTAL
 
 # The rotation is side-specific: the pre-calyx axon (model x) becomes the
-# mediolateral crossing trapezoid-body fibre, mirrored across sides so the calyx
-# dipoles sum COHERENTLY, and a single tilt about head x lifts the dendritic axis
-# to MNTB_LONGAXIS_FROM_HORIZ_DEG (Kulesza) while leaving that dominant
-# mediolateral dipole invariant.
+# mediolateral crossing trapezoid-body fibre, mirrored across sides so the
+# calyx dipoles sum coherently, and a single tilt about head x lifts the
+# dendritic axis to MNTB_LONGAXIS_FROM_HORIZ_DEG (Kulesza) while leaving that
+# dominant mediolateral dipole invariant.
 MNTB_POS_UM = P.MNTB_POS_UM
 ROTATION = P.ROTATION_MNTB
 
@@ -73,7 +73,7 @@ POPULATIONS = {
 
 
 def _run_one_source(pop_name, side, args, meta):
-    """Run one MNTB generator -> summed whole-cell dipole (3, T) nA·µm on rank 0."""
+    """Run one MNTB generator, summing a whole-cell dipole (3, T) nA.µm on rank 0."""
     from lfpykit import CurrentDipoleMoment
     cfg = POPULATIONS[pop_name]
     contra_side = 'R' if side == 'L' else 'L'
@@ -86,9 +86,11 @@ def _run_one_source(pop_name, side, args, meta):
     tau_yx_local = [per_pop_syn['GBC']['tau2']]
 
     stem       = _pic_stem(paths.resolve_pic(args.pic_file))
-    spikes_dir = paths.spikes_dir_for(stem, args.angle, side)
+    cond_val, cond_label = paths.condition_key(args.angle, args.itd_us,
+                                              args.ild_db)
+    spikes_dir = paths.spikes_dir_for(stem, cond_val, side)
     output_dir = paths.make_output_dirs(
-        paths.output_dir_for('abr', stem, f'angle{args.angle}', side,
+        paths.output_dir_for('abr', stem, cond_label, side,
                              prefix=f'mntb_{pop_name}'),
         subdirs=('figures',))
 
@@ -108,10 +110,10 @@ def _run_one_source(pop_name, side, args, meta):
         n_syn_per_pop=n_syn_per_pop, y=pop_label,
         cellParams={'morphology': cfg['hoc'], 'passive': False, 'v_init': V_INIT,
                     'dt': DT, 'tstart': 0., 'tstop': TSTOP, 'nsegs_method': None},
-        # NO random rotation for the ABR: the GBC axons cross the midline in a
-        # common mediolateral direction, so the pre-calyx axon dipoles must sum
-        # COHERENTLY (Karadas 2021 aligned axial current). A random z-rotation
-        # (as used for the near-field LFP) would average the x-dipole to zero.
+        # No random rotation for the ABR: the GBC axons cross the midline in a
+        # common mediolateral direction, so the pre-calyx axon dipoles have to
+        # sum coherently (Karadas 2021 aligned axial current). The random
+        # z-rotation used for the near-field LFP would zero the x-dipole.
         rand_rot_axis=[],
         simulationParams={'rec_imem': True},
         populationParams={'number': args.n_cells,
@@ -142,7 +144,7 @@ def _run_one_source(pop_name, side, args, meta):
 
 
 def _apply_head_model(sources, output_dir, electrode_names):
-    """Project each generator from the MNTB position and SUM at the scalp."""
+    """Project each generator from the MNTB position and sum at the scalp."""
     lo, hi = P.BAND_CLINICAL
     V_out = head_model.superpose_sources(
         [(part_label, p_head, r) for part_label, _side, p_head, r in sources],
@@ -160,7 +162,8 @@ def _apply_head_model(sources, output_dir, electrode_names):
     return V_out, srate
 
 
-def _plot_abr(output_dir, V_out, electrode_names, srate, angle, side, n_cells):
+def _plot_abr(output_dir, V_out, electrode_names, srate, cond_label, side,
+              n_cells):
     cz = electrode_names.index('Cz')
     m1 = electrode_names.index('M1')
     tvec = np.arange(next(iter(V_out.values())).shape[1]) / srate * 1e3
@@ -172,7 +175,7 @@ def _plot_abr(output_dir, V_out, electrode_names, srate, angle, side, n_cells):
                  zorder=3 if key == 'composite' else 2)
     ax0.axhline(0, color='k', lw=0.4, ls=':')
     ax0.set_ylabel('Cz potential (µV)')
-    ax0.set_title(f'MNTB ABR (principal + calyx prespike) | angle {angle}° | '
+    ax0.set_title(f'MNTB ABR (principal + calyx prespike) | {cond_label} | '
                   f'side {side} | N={n_cells}')
     ax0.legend(fontsize=9)
     diff = V_out['composite'][cz] - V_out['composite'][m1]
@@ -186,6 +189,16 @@ def _plot_abr(output_dir, V_out, electrode_names, srate, angle, side, n_cells):
     print(f'ABR figure saved -> {path}')
 
 
+def _cond_value(args):
+    """Raw stimulus key the spike cache is stored under (angle, seconds or dB)."""
+    return paths.condition_key(args.angle, args.itd_us, args.ild_db)[0]
+
+
+def _cond_label(args):
+    """Readable stimulus label for the output directory name."""
+    return paths.condition_key(args.angle, args.itd_us, args.ild_db)[1]
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description='MNTB ABR reconstruction')
@@ -193,6 +206,12 @@ def main():
     parser.add_argument('--angle',    type=int, default=0)
     parser.add_argument('--side',     type=str, default='L', choices=['L', 'R', 'both'])
     parser.add_argument('--n-cells',  type=int, default=200, dest='n_cells')
+    parser.add_argument('--itd-us', type=float, default=None, dest='itd_us',
+                        help='select an artificial-ITD condition (µs); overrides '
+                             '--angle. The pic key is looked up in seconds.')
+    parser.add_argument('--ild-db', type=float, default=None, dest='ild_db',
+                        help='select an artificial-ILD condition (dB); overrides '
+                             '--itd-us and --angle.')
     parser.add_argument('--generators', type=str, default='both',
                         choices=['principal', 'calyx', 'both'], dest='generators',
                         help='which MNTB generators to model. The postsynaptic cell '
@@ -207,7 +226,7 @@ def main():
 
     meta_by_side = {
         side: broadcast_from_root(
-            lambda side=side: _extract_spikes(args.angle, side,
+            lambda side=side: _extract_spikes(_cond_value(args), side,
                                               pic_file=args.pic_file))
         for side in sides
     }
@@ -219,19 +238,20 @@ def main():
             if RANK == 0:
                 p_head = head_model.rotate_to_head(dipole, ROTATION[side])
                 sources.append((pop_name, side, p_head, MNTB_POS_UM[side]))
-                save_dipole_record(stem, args.angle, 'MNTB', pop_name, side,
+                save_dipole_record(stem, _cond_label(args), 'MNTB',
+                                   pop_name, side,
                                    p_head, MNTB_POS_UM[side], N_MNTB_TOTAL,
                                    args.n_cells, SRATE)
 
     if RANK == 0:
         final_dir = paths.make_output_dirs(
-            paths.output_dir_for('abr', stem, f'angle{args.angle}', args.side,
+            paths.output_dir_for('abr', stem, _cond_label(args), args.side,
                                  prefix='mntb'),
             subdirs=('figures',))
         electrode_names = list(P.ELECTRODES)
         V_out, srate = _apply_head_model(sources, final_dir, electrode_names)
         _plot_abr(final_dir, V_out, electrode_names, srate,
-                  args.angle, args.side, args.n_cells)
+                  _cond_label(args), args.side, args.n_cells)
 
 
 if __name__ == '__main__':

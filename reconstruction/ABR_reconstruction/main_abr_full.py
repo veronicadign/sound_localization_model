@@ -1,33 +1,34 @@
 """
-Complete brainstem ABR — superpose ALL nuclei into one composite.
+Complete brainstem ABR: superpose all nuclei into one composite.
 
-Each per-nucleus ABR script (main_abr{,_avcn,_lso,_mntb}.py) writes a standardised
-head-frame dipole record per (generator, side) into
+Each per-nucleus ABR script (main_abr{,_avcn,_lso,_mntb}.py) writes a
+standardised head-frame dipole record per (generator, side) into
 
-    RESULTS/abr_tmp/dipoles/<stem>_angle<A>/<nucleus>__<generator>__<side>.h5
+    RESULTS/abr_tmp/dipoles/<stem>_<cond>/<nucleus>__<generator>__<side>.h5
 
-(see main_abr.save_dipole_record).  This orchestrator collects those records for
-one stimulus, projects every generator through the SAME 4-sphere head model from
-its own anatomical position, and SUMS the scalp potentials (exact linear
-superposition).  No NEURON simulation is re-run here — run each nucleus once (at
-full N), then this.
+(see main_abr.save_dipole_record), where <cond> is the stimulus label the
+producers ran with ('angle0', 'itd500us', 'ild-10dB'). This orchestrator
+collects those records for one stimulus, selected with the same --angle,
+--itd-us or --ild-db flag, projects every generator through the 4-sphere model
+from its own anatomical position, and sums the scalp potentials. No NEURON
+simulation is re-run: run each nucleus once at full N, then this.
 
-Because all four pipelines share DT=0.026 ms / TSTOP=50 ms, every dipole lives on
-the same time axis, so the inter-wave latencies fall straight out of the NEST
-spike timing.  Full-count runs are assumed (no N_total/n_cells scaling): the raw
-head dipoles are summed as-is.
+All four pipelines share DT=0.026 ms and TSTOP=50 ms, so every dipole lives on
+the same time axis and the inter-wave latencies fall out of the NEST spike
+timing. Full-count runs are assumed (no N_total/n_cells scaling): the raw head
+dipoles are summed as they are.
 
-Generators (each modelled exactly once — no double counting):
-  AVCN:GBC   wave II–III   (GBC soma+dendrites + 4 mm crossing axon = the volley)
+Generators, each modelled exactly once so nothing is counted twice:
+  AVCN:GBC   waves II to III (GBC soma, dendrites and 4 mm crossing axon)
   AVCN:SBC   wave II
   MNTB:principal / MNTB:calyx   small own field (wave III proper is the GBC axon)
-  MSO:postsynaptic            wave IV–V
-  LSO:spiking|synaptic        wave IV–V (lateral-lemniscus travelling wave / BIC)
-Wave I (ANF) is NOT modelled — the earliest generator is the GBC.
+  MSO:postsynaptic            waves IV to V
+  LSO:spiking|synaptic        waves IV to V (LL travelling wave, BIC)
+Wave I (ANF) is not modelled, so the earliest generator is the GBC.
 
 Output:
-  RESULTS/abr_tmp/output_full_<stem>_angle<A>_<sidespec>/ABR_full.h5
-        (per-generator + per-nucleus + composite, µV) + figures/full_abr.png
+  RESULTS/full_abr/<stem>_<cond>_<sidespec>/ABR_full.h5
+        (per-generator, per-nucleus and composite, µV) + figures/full_abr.png
 
 Usage:
   python ABR_reconstruction/main_abr_full.py --pic-file RESULTS/<f>.pic \
@@ -61,42 +62,42 @@ dipoles_dir_for = paths.dipoles_dir_for
 
 
 # ---------------------------------------------------------------------------
-def _discover(stem, angle, want_nuclei, want_sides, want_condition,
+def _discover(stem, cond_label, want_nuclei, want_sides, want_condition,
               lso_generator='spiking'):
-    """Load matching dipole records → (records, srate).
+    """Load matching dipole records as (records, srate).
 
-    Each record is `(label, nucleus, side, p_head, r_dipole)`; `srate` is taken
-    from the records themselves, so this orchestrator needs no simulation
-    constants of its own.
+    Each record is (label, nucleus, side, p_head, r_dipole). srate comes from
+    the records themselves, so this orchestrator needs no simulation constants.
 
-    Per (nucleus, generator, side) the requested `want_condition` is used if a
-    record for it exists, else the 'binaural' record is used as fallback — so a
-    monaural composite reuses the condition-invariant AVCN/MNTB records (only ever
-    written as 'binaural') while picking the condition-specific MSO/LSO records.
+    Per (nucleus, generator, side) the requested want_condition is used if a
+    record for it exists, else the binaural record. So a monaural composite
+    reuses the condition-invariant AVCN/MNTB records, only ever written as
+    binaural, while picking the condition-specific MSO/LSO records.
 
-    `lso_generator` selects the LSO generator: 'spiking' (output travelling wave) and
-    'synaptic' (postsynaptic dipole) are ALTERNATIVE models of the LSO's ABR
-    contribution — never summed — so only the requested one is kept.
+    lso_generator selects the LSO generator: 'spiking' (output travelling wave)
+    and 'synaptic' (postsynaptic dipole) are alternative models of the LSO's
+    ABR contribution and are never summed, so only the requested one is kept.
 
-    Under a MONAURAL condition (left_ear/right_ear) the monaural-by-construction
-    nuclei are restricted to the ear-appropriate hemisphere: the silent ear drives
-    no click-locked response, so AVCN (ipsilateral to the ear) keeps only that side
-    and MNTB (contralateral — the GBC→calyx decussates) keeps the opposite side.
-    MSO/LSO keep both hemispheres (both receive monaural drive).
+    Under a monaural condition (left_ear/right_ear) the nuclei that are
+    monaural by construction are restricted to the ear-appropriate hemisphere:
+    the silent ear drives no click-locked response, so AVCN keeps only its
+    ipsilateral side and MNTB the opposite one (the GBC to calyx projection
+    decussates). MSO and LSO keep both hemispheres.
     """
-    # ear -> (AVCN side, MNTB side) for monaural conditions
+    # ear to (AVCN side, MNTB side) for monaural conditions
     _EAR_SIDES = {'right_ear': ('R', 'L'), 'left_ear': ('L', 'R')}
     mono = _EAR_SIDES.get(want_condition)
 
-    ddir = dipoles_dir_for(stem, angle)
+    ddir = dipoles_dir_for(stem, cond_label)
     record_paths = sorted(glob.glob(os.path.join(ddir, '*.h5')))
     if not record_paths:
         raise FileNotFoundError(
-            f'no dipole records in {ddir}\n  Run each nucleus ABR first, e.g.\n'
+            f'no dipole records in {ddir}\n  Run each nucleus ABR first, with '
+            f'the same stimulus selector, e.g.\n'
             f'    python ABR_reconstruction/main_abr_avcn.py --pic-file ... '
-            f'--angle {angle} --side both')
+            f'--side both')
 
-    cand = {}    # (nucleus, generator, side) -> {condition: record}
+    cand = {}    # (nucleus, generator, side) to {condition: record}
     srates = set()
     for path in record_paths:
         attrs, p_head, r_dipole = io_utils.read_dipole_record(path)
@@ -134,22 +135,26 @@ def _discover(stem, angle, want_nuclei, want_sides, want_condition,
     return recs, srates.pop()
 
 
-def assemble(stem, angle, want_nuclei, sides, condition, lso_generator='synaptic',
-             band=(150., 3000.)):
-    """Collect dipole records for one condition and superpose → composite.
+def assemble(stem, cond_label, want_nuclei, sides, condition,
+             lso_generator='synaptic', band=(150., 3000.)):
+    """Collect dipole records for one stimulus and superpose them.
 
-    Returns (V_gen, V_nuc, srate): V_gen maps 'nucleus:generator' + 'composite' to
-    band-passed (n_e, T) µV; V_nuc maps nucleus → summed µV. Reused by main() and
-    by the Curio & Weigel BI reproduction (main_abr_bi.py).
+    cond_label is the stimulus label the producers filed their records under
+    ('angle0', 'itd500us', 'ild-10dB'); condition is the acoustic condition
+    ('binaural', 'left_ear', 'right_ear').
+
+    Returns (V_gen, V_nuc, srate): V_gen maps 'nucleus:generator' and
+    'composite' to band-passed (n_e, T) µV; V_nuc maps nucleus to summed µV.
+    Reused by main() and by the Curio & Weigel BI reproduction (main_abr_bi.py).
     """
     lo, hi = band
-    recs, srate = _discover(stem, angle, want_nuclei, set(sides), condition,
+    recs, srate = _discover(stem, cond_label, want_nuclei, set(sides), condition,
                             lso_generator=lso_generator)
     V_gen = head_model.superpose_sources(
         [(label, p_head, r) for (label, _nuc, _side, p_head, r) in recs],
         ELECTRODES, srate, lo=lo, hi=hi)
 
-    # per-nucleus = sum of that nucleus's generator traces (linear filter ⇒ safe)
+    # per-nucleus is the sum of that nucleus's traces (safe, the filter is linear)
     nuc_of = {f'{n}:{g}': n for (lbl, n, s, _p, _r) in recs
               for (g,) in [(lbl.split(':', 1)[1],)]}
     V_nuc = defaultdict(lambda: 0.0)
@@ -185,14 +190,14 @@ def _plot(out_dir, V_gen, V_nuc, srate, side, derivation):
 
     path = os.path.join(out_dir, 'figures', 'full_abr.png')
     fig.savefig(path, dpi=150); plt.close(fig)
-    print(f'figure saved → {path}')
+    print(f'figure saved to {path}')
 
 
 def _summary(V_nuc, V_gen, srate):
-    """Per-nucleus Cz onset/peak table — the wave-ordering check.
+    """Per-nucleus Cz onset and peak table, the wave-ordering check.
 
-    Onset (first crossing of 30 % of the peak, after the band-pass edge) is the
-    robust ordering metric; peak latency is coarser (waveform-shape dependent).
+    Onset (first crossing of 30% of the peak, after the band-pass edge) is the
+    robust ordering metric; peak latency depends on waveform shape.
     """
     t = time_axis(V_gen['composite'].shape[1], srate)
     cz = ELECTRODES.index('Cz')
@@ -215,6 +220,11 @@ def main():
     ap = argparse.ArgumentParser(description='Complete brainstem ABR (all nuclei)')
     ap.add_argument('--pic-file', type=str, default=None, dest='pic_file')
     ap.add_argument('--angle',    type=int, default=0)
+    ap.add_argument('--itd-us', type=float, default=None, dest='itd_us',
+                    help='artificial ITD in µs; overrides --angle, and selects '
+                         'the dipole records the producers filed under it.')
+    ap.add_argument('--ild-db', type=float, default=None, dest='ild_db',
+                    help='artificial ILD in dB; overrides --itd-us and --angle.')
     ap.add_argument('--side',     type=str, default='both', choices=['L', 'R', 'both'])
     ap.add_argument('--nuclei',   type=str, default=None,
                     help='comma-separated subset (e.g. MSO,AVCN); default = all present')
@@ -234,12 +244,13 @@ def main():
     pic_file = args.pic_file or os.path.join(REPO_ROOT, 'RESULTS',
                                              'baseline_simulation.pic')
     stem  = _pic_stem(pic_file)
+    _, cond_label = paths.condition_key(args.angle, args.itd_us, args.ild_db)
     sides = ['L', 'R'] if args.side == 'both' else [args.side]
     want_nuclei = (set(n.strip() for n in args.nuclei.split(',')) if args.nuclei
                    else None)
     lo, hi = (float(x) for x in args.band.split(','))
 
-    V_gen, V_nuc, srate = assemble(stem, args.angle, want_nuclei, sides,
+    V_gen, V_nuc, srate = assemble(stem, cond_label, want_nuclei, sides,
                                    args.condition, lso_generator=args.lso_generator,
                                    band=(lo, hi))
     print(f'collected generators ({args.condition}, LSO={args.lso_generator}): '
@@ -247,21 +258,23 @@ def main():
 
     cond_tag = '' if args.condition == 'binaural' else f'_{args.condition}'
     lso_tag  = '' if args.lso_generator == 'spiking' else f'_lso{args.lso_generator}'
+    # cond_label names the dipole set this composite was built from
+    # (RESULTS/abr_tmp/dipoles/<stem>_<cond_label>).
     out_dir = paths.make_output_dirs(
-        paths.output_dir_for('abr', stem, f'angle{args.angle}', args.side,
-                             prefix='full', suffix=f'{cond_tag}{lso_tag}'),
+        os.path.join(paths.FULL_ABR_DIR,
+                     f'{stem}_{cond_label}_{args.side}{cond_tag}{lso_tag}'),
         subdirs=('figures',))
 
     with h5py.File(os.path.join(out_dir, 'ABR_full.h5'), 'w') as f:
-        for label, V in V_gen.items():          # per-generator + composite
+        for label, V in V_gen.items():          # per-generator and composite
             f.create_dataset(label.replace(':', '__'), data=V)
         for nuc, V in V_nuc.items():            # per-nucleus
             f.create_dataset(f'nucleus__{nuc}', data=V)
         f.create_dataset('srate', data=srate)
         f.create_dataset('electrode_names', data=np.array(ELECTRODES, dtype='S'))
-        f.attrs.update(units='µV', stem=stem, angle=str(args.angle),
+        f.attrs.update(units='µV', stem=stem, cond_label=cond_label,
                        side=args.side, band=f'{lo}-{hi} Hz')
-    print(f'ABR_full.h5 saved → {out_dir}')
+    print(f'ABR_full.h5 saved to {out_dir}')
 
     _summary(V_nuc, V_gen, srate)
     _plot(out_dir, V_gen, V_nuc, srate, args.side, args.derivation)

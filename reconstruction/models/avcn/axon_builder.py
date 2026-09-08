@@ -1,19 +1,19 @@
 """
 Append a synthetic node/internode active myelinated axon to a loaded bushy cell.
 
-The EM globular-bushy-cell reconstructions carry only ~18 µm of myelinated axon —
-far too short to support a propagating action potential.  For the GBC axonal
-traveling-wave dipole (the GBC->contralateral-MNTB volley, an ABR generator) we
-extend the axon with a synthetic node/internode cable of realistic length, then
-decorate it (via gbc_biophysics: nodes active, internodes passive myelin) so a
-saltatory AP can propagate and feed the CurrentDipoleMoment.
+The EM globular-bushy-cell reconstructions carry only ~18 µm of myelinated
+axon, far too short to support a propagating action potential. For the GBC
+axonal travelling-wave dipole (the GBC to contralateral MNTB volley, an ABR
+generator) the axon is extended with a synthetic node/internode cable of
+realistic length and then decorated by gbc_biophysics (nodes active, internodes
+passive myelin), so a saltatory AP can propagate and feed CurrentDipoleMoment.
 
 Sections are created in NEURON and appended to two SectionLists,
-``Node_of_Ranvier`` and ``Internode`` — the names gbc_biophysics.COMPARTMENT_OF
-maps to the 'node' / 'internode' compartment classes, so decoration is automatic.
+Node_of_Ranvier and Internode, the names gbc_biophysics.COMPARTMENT_OF maps to
+the 'node' and 'internode' compartment classes, so decoration is automatic.
 
-This is a morphology-construction step (geometry + topology only); all biophysics
-stays in gbc_biophysics.decorate_gbc.
+This is a morphology construction step, geometry and topology only; the
+biophysics stays in gbc_biophysics.decorate_gbc.
 """
 
 import os
@@ -22,12 +22,30 @@ from collections import defaultdict
 import numpy as np
 from neuron import h
 
-# --- literature-placeholder geometry (mammalian myelinated axon, ~1.5 µm fiber) -
-FIBER_DIAM    = 1.5     # µm  internode (axon) diameter
-NODE_DIAM     = 1.0     # µm  node is slightly constricted
+# --- geometry of the crossing GBC axon -------------------------------------
+# Calibre is measured, not a placeholder: Beckius, Batra & Oliver (1999)
+# reconstructed AVCN axons in cat in 3-D and measured the fibre at the midline,
+# exactly this crossing trapezoid-body segment, at 2.09 +/- 0.33 and
+# 2.21 +/- 0.44 um. The globular bushy cell's axon is one of the thickest in
+# the brainstem, about 3x the spherical bushy cell's, and the calibre is what
+# buys the conduction speed the calyx of Held needs.
+#
+# These numbers are cat. No human GBC axon morphometry exists. Human axons are
+# longer and conduction time is broadly conserved across species by scaling
+# calibre, so 2.1 um is more likely a floor than a target for human.
+FIBER_DIAM    = 2.1     # µm  internode (myelinated) diameter, Beckius 1999, cat
+NODE_DIAM     = 1.4     # µm  node constricted to the same 0.67 ratio as before
 NODE_LEN      = 1.0     # µm
-INTERNODE_LEN = 150.0   # µm  (~100x fiber diameter)
-AXON_LENGTH   = 4000.0  # µm  total extension toward the contralateral MNTB
+INTERNODE_LEN = 210.0   # µm  (~100x fibre diameter, the standard scaling)
+
+# Truncation. The real path from the cochlear nucleus to the contralateral MNTB
+# is ~15 mm (13.9 mm of it mediolateral, see head_geometry.NUCLEUS_POS_UM), so
+# this 4 mm cable is a deliberate stump. It does not shrink the peak dipole: an
+# action potential occupies only ~2.2 mm at this conduction velocity, so it fits
+# inside the modelled cable. What it truncates is the volley's duration, ~0.8 ms
+# modelled against ~3 ms for the full path, making the reconstructed wave III
+# sharper than the real one rather than smaller.
+AXON_LENGTH   = 4000.0  # µm  extension toward the contralateral MNTB
 
 SL_NODE  = 'Node_of_Ranvier'
 SL_INTER = 'Internode'
@@ -49,11 +67,11 @@ def _append(sl_name, sec):
 
 
 def _distal_axon_end(direction=None):
-    """Return (terminal_section, end_point_xyz, unit_direction) of the existing axon.
+    """Return (terminal_section, end_point_xyz, unit_direction) of the axon.
 
-    Prefers the myelinated axon, falling back to the AIS then hillock.  The
-    terminal is the axon-list section with no child (a tip); the direction is
-    taken from its last two 3-D points unless overridden.
+    Prefers the myelinated axon, falling back to the AIS then the hillock. The
+    terminal is the axon-list section with no child; the direction comes from
+    its last two 3-D points unless overridden.
     """
     axon_secs = []
     for slname in ('Myelinated_Axon', 'Axon_Initial_Segment', 'Axon_Hillock'):
@@ -91,9 +109,9 @@ def build_extended_axon(length=AXON_LENGTH, internode_len=INTERNODE_LEN,
                         node_diam=NODE_DIAM, direction=None, verbose=False):
     """Append a straight node/internode cable to the cell's distal axon.
 
-    Returns (nodes, internodes) — lists of the created Sections, in order.
-    The cable begins at the existing axon's distal tip and runs straight along
-    its exit direction (or ``direction`` if given).  Geometry only; call
+    Returns (nodes, internodes), the created Sections in order. The cable
+    begins at the existing axon's distal tip and runs straight along its exit
+    direction, or along direction if given. Geometry only; call
     gbc_biophysics.decorate_gbc afterwards to make the nodes active.
     """
     _ensure_sectionlists()
@@ -137,12 +155,12 @@ def build_extended_axon(length=AXON_LENGTH, internode_len=INTERNODE_LEN,
 # ---------------------------------------------------------------------------
 # Bake the current NEURON cell (original morphology + extended axon) to .hoc
 # ---------------------------------------------------------------------------
-# LFPy.Cell(morphology=file) rebuilds the cell FROM THE FILE and only tracks the
-# sections it finds there — sections added programmatically afterwards are
-# invisible to its imem/dipole bookkeeping.  So for the population pipeline the
-# extended axon must live in the morphology file itself.  This dumps the live
-# cell to a self-contained syGlass-style hoc (same convention as
-# morphology/dryad/*.hoc and SBC_S113.hoc), which LFPy then loads natively.
+# LFPy.Cell(morphology=file) rebuilds the cell from the file and only tracks
+# the sections it finds there, so sections added programmatically afterwards
+# are invisible to its imem and dipole bookkeeping. For the population pipeline
+# the extended axon therefore has to live in the morphology file itself. This
+# dumps the live cell to a self-contained syGlass-style hoc, the same
+# convention as morphology/dryad/*.hoc and SBC_S113.hoc, which LFPy loads.
 CLASS_TO_SECTIONLIST = {
     'soma':              'soma',
     'hillock':           'Axon_Hillock',
@@ -157,12 +175,12 @@ CLASS_TO_SECTIONLIST = {
 
 
 def write_cell_hoc(out_path, source_note=''):
-    """Dump every currently-instantiated section to a self-contained hoc file.
+    """Dump every currently instantiated section to a self-contained hoc file.
 
     Section identity is preserved by re-emitting each section into the
     SectionList its compartment class maps to (gbc_biophysics.COMPARTMENT_OF),
     so the written file decorates identically to the live cell.
-    Geometry only (pt3dadd) — no mechanisms.
+    Geometry only (pt3dadd), no mechanisms.
     """
     import gbc_biophysics as gb
     comp = gb._classify_sections()
@@ -219,7 +237,7 @@ def write_cell_hoc(out_path, source_note=''):
 
 
 def make_extended_morphology(src_hoc, out_hoc, **kwargs):
-    """Load a bushy morphology, append the active axon, and bake it to `out_hoc`."""
+    """Load a bushy morphology, append the active axon, bake it to out_hoc."""
     h.load_file('stdlib.hoc')
     h.load_file('import3d.hoc')
     h.load_file(src_hoc)

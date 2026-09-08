@@ -1,14 +1,14 @@
 """
-Phase-2a proof-of-concept: GBC axonal traveling-wave dipole (single cell).
+Single-cell check of the GBC axonal travelling-wave dipole.
 
 Loads a GBC morphology, appends a synthetic node/internode active axon
 (axon_builder), decorates it (gbc_biophysics: active nodes, passive myelin),
-fires ONE action potential at the soma, and checks that:
+fires one action potential at the soma, and checks that:
 
-  1. the AP propagates SALTATORILY along the axon (node Vm sequence),
+  1. the AP propagates saltatorily along the axon (node Vm sequence),
   2. conduction velocity is physiological (~3-10 m/s),
-  3. the net current-dipole moment shows a TRAVELLING-WAVE signature (a moving
-     axonal current source, distinct from the stationary synaptic dipole).
+  3. the net current-dipole moment shows a travelling-wave signature, a moving
+     axonal current source distinct from the stationary synaptic dipole.
 
 Saves models/avcn/figures/gbc_axon_travelingwave.png
 
@@ -22,6 +22,10 @@ import sys
 import numpy as np
 import neuron
 from neuron import h
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__)))))
+from recon_core import params as _P                      # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -65,7 +69,7 @@ def main():
     nodes, internodes = ab.build_extended_axon(verbose=True)
     gb.decorate_gbc(set_nseg=True, ref_ns=gb.REF_NS_II)
     h.cvode.use_fast_imem(1)
-    h.celsius = 34.0
+    h.celsius = _P.BODY_TEMPERATURE_C   # the pipeline temperature
 
     pos = seg_positions()
 
@@ -89,7 +93,7 @@ def main():
                 imem.append(h.Vector().record(seg._ref_i_membrane_))
     seg_pos = np.array(seg_pos)          # (Nseg, 3) µm
 
-    # fire ONE action potential with a brief strong somatic pulse
+    # fire one action potential with a brief strong somatic pulse
     ic = h.IClamp(soma(0.5)); ic.delay, ic.dur, ic.amp = 2.0, 0.3, 3.0
     h.finitialize(-65.0)
     h.continuerun(8.0)
@@ -140,7 +144,7 @@ def _plot(t, vs, vN, node_dist, node_t, im, seg_pos, seg_list, nodes, p, cv, n_f
 
     fig, axes = plt.subplots(1, 3, figsize=(17, 5.2), constrained_layout=True)
 
-    # (a) node Vm stacked by distance -> saltatory propagation
+    # (a) node Vm stacked by distance, showing saltatory propagation
     sc = 40.0
     for i in range(len(nodes)):
         axes[0].plot(t, vN[i] / 120 * sc + node_dist[i], color='k', lw=0.5)
@@ -151,7 +155,7 @@ def _plot(t, vs, vN, node_dist, node_t, im, seg_pos, seg_list, nodes, p, cv, n_f
     axes[0].set_title(f'Node Vm — AP propagation ({n_fired}/{len(nodes)} nodes)')
     axes[0].legend(fontsize=8)
 
-    # (b) axonal transmembrane current raster (distance x time): traveling source
+    # (b) axonal transmembrane current raster (distance x time): travelling source
     vmax = np.percentile(np.abs(im_ax), 99) or 1e-6
     axes[1].imshow(im_ax, aspect='auto', origin='lower', cmap='RdBu_r',
                    vmin=-vmax, vmax=vmax,

@@ -4,18 +4,18 @@ Where each modelled nucleus sits inside the 4-sphere head model.
 
 Two views of the same geometry:
 
-`--view panels`   one figure: sagittal, coronal, axial and a 3-D rendering, with
-                  every requested nucleus on each
-`--view coronal`  one coronal figure PER nucleus, annotated with its coordinates
+--view panels   one figure: sagittal, coronal, axial and a 3-D rendering, with
+                every requested nucleus on each
+--view coronal  one coronal figure per nucleus, annotated with its coordinates
 
-Positions come from `recon_core.head_geometry` — the parameter file the pipeline
-itself reads — so these figures cannot drift from the simulation.  They are
-atlas-derived; see `RESULTS/atlas_validation/` for the provenance.
+Positions come from recon_core.head_geometry, the parameter file the pipeline
+itself reads, so these figures cannot drift from the simulation. They are
+atlas-derived; see RESULTS/atlas_validation/ for the provenance.
 
 Head-centred coordinates (mm):
-  x  left (−) / right (+)      mediolateral
-  y  posterior (−) / anterior (+)  anteroposterior
-  z  inferior (−) / superior (+)   inferosuperior
+  x  left (-) / right (+)          mediolateral
+  y  posterior (-) / anterior (+)  anteroposterior
+  z  inferior (-) / superior (+)   inferosuperior
   origin = centre of the head sphere; Cz (vertex) = [0, 0, +90]
 
 Usage:
@@ -161,7 +161,7 @@ def _three_d(ax, nuclei):
 
 
 def plot_panels(nuclei, out_png):
-    """Sagittal / coronal / axial / 3-D, with every nucleus on each."""
+    """Sagittal, coronal, axial and 3-D, with every nucleus on each."""
     fig = plt.figure(figsize=(16, 12))
     fig.suptitle('Brainstem nuclei dipole positions in the 4-sphere head model\n'
                  f'{", ".join(nuclei)} — head-centred coordinates (mm)',
@@ -186,7 +186,7 @@ def plot_panels(nuclei, out_png):
     os.makedirs(os.path.dirname(out_png), exist_ok=True)
     fig.savefig(out_png, dpi=150, bbox_inches='tight')
     plt.close(fig)
-    print(f'figure saved → {out_png}')
+    print(f'figure saved to {out_png}')
 
 
 def plot_coronal(name, out_png):
@@ -220,7 +220,7 @@ def plot_coronal(name, out_png):
     os.makedirs(os.path.dirname(out_png), exist_ok=True)
     fig.savefig(out_png, dpi=150, bbox_inches='tight')
     plt.close(fig)
-    print(f'figure saved → {out_png}')
+    print(f'figure saved to {out_png}')
 
 
 def main():

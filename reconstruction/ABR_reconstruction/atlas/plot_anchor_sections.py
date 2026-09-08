@@ -3,11 +3,11 @@
 
 Left panels: the annotated polygons of a few sections, drawn in each section's
 own derived anatomical frame (raphe at the origin, dorsal upward), with the SOC
-subnuclei highlighted.  Right panel: the resulting 3-D layout - lateral distance
+subnuclei highlighted. Right panel: the resulting 3-D layout, lateral distance
 from the midline against rostrocaudal position.
 
     python ABR_reconstruction/atlas/plot_anchor_sections.py
--> RESULTS/atlas_validation/figures/anchor_sections.png
+writes RESULTS/atlas_validation/figures/anchor_sections.png
 """
 
 import os
@@ -22,8 +22,8 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(_HERE))
 sys.path.insert(0, PACKAGE_ROOT)
 
-# reconstruction/ is two levels up; adding it lets the atlas scripts share
-# the pipeline's own notion of where the repository is.
+# reconstruction/ is a couple of levels up; put it on sys.path so the atlas
+# scripts share the pipeline's own repository root.
 from recon_core.paths import REPO_ROOT                            # noqa: E402
 sys.path.insert(0, _HERE)
 

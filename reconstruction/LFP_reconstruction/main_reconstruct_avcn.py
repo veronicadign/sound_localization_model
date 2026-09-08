@@ -2,26 +2,26 @@
 """
 HybridLFPy LFP reconstruction for the AVCN globular bushy cell (GBC) population.
 
-Unlike the MSO/LSO scripts (hand-drawn stick morphologies + Exp2Syn), the GBC is
-a morphologically detailed cell decorated with ported cnmodel channels
-(klt/kht/ihvcn/leak/nacncoop, XM13_nacncoop mouse Type-II) and driven by
-auditory-nerve endbulbs of Held.
+Unlike the MSO/LSO scripts (stick morphologies with Exp2Syn), the GBC is a
+detailed morphology decorated with ported cnmodel channels (klt, kht, ihvcn,
+leak, nacncoop; XM13_nacncoop mouse Type II) and driven by auditory-nerve
+endbulbs of Held.
 
-Scaffold morphology: cnmodel bushy_stick.hoc (models/avcn/morphology/); to be
-swapped for a Dryad EM reconstruction later. Biophysics is applied at cell build
-time via LFPy custom_fun = gbc_biophysics.decorate_gbc (adapts to any morphology).
+Morphology: the Dryad EM reconstruction under models/avcn/morphology/.
+Biophysics is applied at cell build time through LFPy custom_fun =
+gbc_biophysics.decorate_gbc, which adapts to any morphology.
 
-Presynaptic drive: ANF_{side} only (ipsilateral; cochlear nucleus is ipsilateral
-to the ear). 20 endbulbs/GBC, matching the NEST ANFs2GBCs convergence, placed
-with biophysically realistic weighting: 70% soma / 20% proximal dendrite+hubs /
-10% axon hillock+AIS (gbc_biophysics.weighted_endbulb_idx).
+Presynaptic drive is ANF_{side} only, since the cochlear nucleus is
+ipsilateral to its ear. 20 endbulbs per GBC, matching the NEST ANFs2GBCs
+convergence, placed 70% soma, 20% proximal dendrite and hubs, 10% hillock and
+AIS (gbc_biophysics.weighted_endbulb_idx).
 
 CLI (single or MPI):
   python LFP_reconstruction/main_reconstruct_avcn.py --pic-file RESULTS/x.pic \
       --angle 0 --side L --n-cells 100
   mpiexec -n 4 python LFP_reconstruction/main_reconstruct_avcn.py ... --n-cells 3600
 
-Outputs -> RESULTS/lfp_tmp/output_avcn_{stem}_angle{A}_{S}/figures/:
+Outputs go to RESULTS/lfp_tmp/output_avcn_{stem}_angle{A}_{S}/figures/:
   avcn_lfp_reconstruction.png
   avcn_lfp_single_cells.png
 """
@@ -40,7 +40,8 @@ import hybridLFPy
 from recon_core import params as P, paths
 from recon_core.population import ReconstructionPopulation
 from LFP_reconstruction import figures
-from recon_core.mpi_utils import COMM, RANK, broadcast_from_root, load_mechanisms
+from recon_core.mpi_utils import (COMM, RANK, broadcast_from_root,
+                                  load_mechanisms, set_temperature)
 
 AVCN_DIR = paths.AVCN_MODELS_DIR
 sys.path.insert(0, AVCN_DIR)
@@ -48,9 +49,10 @@ import gbc_biophysics  # noqa: E402
 
 # AVCN mechanisms only: their SUFFIXes collide with models/mso.
 load_mechanisms(AVCN_DIR)
+set_temperature(P.BODY_TEMPERATURE_C)
 
 STICK_HOC = os.path.join(AVCN_DIR, 'morphology', 'bushy_stick.hoc')
-# Default: the Dryad EM reconstruction (mesh-inflated, accurate surface areas).
+# Default is the Dryad EM reconstruction (mesh-inflated, accurate surface areas).
 # --hoc-file picks another VCN_c* cell, or STICK_HOC for a fast smoke test.
 HOC_FILE = os.path.join(AVCN_DIR, 'morphology', 'dryad',
                         'VCN_c09_Full_MeshInflate.hoc')
@@ -93,10 +95,10 @@ FIGURE_STYLE = figures.FigureStyle(name='AVCN (GBC)', file_prefix='avcn',
 class AVCNPopulation(ReconstructionPopulation):
     """Bushy cells driven by ANF endbulbs of Held.
 
-    Serves BOTH bushy types: the globular cell (20 modified endbulbs, EM
+    Serves both bushy types: the globular cell (20 modified endbulbs, EM
     morphology) and the spherical cell (3 large axosomatic endbulbs, its own
-    morphology and channel densities).  They differ only in the constructor
-    arguments, so `main_reconstruct_sbc.py` is a parameter set, not a second class.
+    morphology and channel densities). They differ only in the constructor
+    arguments, so main_reconstruct_sbc.py is a parameter set, not a class.
     """
 
     PER_POP_SYN = P.GBC_SYNAPSES
@@ -113,13 +115,13 @@ class AVCNPopulation(ReconstructionPopulation):
         super().__init__(n_syn_per_pop=n_syn_per_pop, per_pop_syn=per_pop_syn, **kwargs)
 
     def set_rotations(self):
-        """Give every cell the SAME rotation, aligning its axon to `axon_target`.
+        """Give every cell the same rotation, aligning its axon to axon_target.
 
-        Replaces hybridLFPy\'s random per-cell rotation.  The GBC axons all cross
-        the midline in one direction, so their axial currents must summate rather
-        than average away — a random spin would cancel the very dipole this
-        population exists to produce.  With `axon_target=None` the parent behaviour
-        (identity) is restored.
+        Replaces hybridLFPy's random per-cell rotation. The GBC axons all cross
+        the midline in one direction, so their axial currents have to summate
+        rather than average away; a random spin would cancel the dipole this
+        population exists to produce. With axon_target=None the parent
+        behaviour (identity) is restored.
         """
         from time import time
         if self.axon_target is None:
@@ -147,7 +149,7 @@ class AVCNPopulation(ReconstructionPopulation):
         return COMM.bcast(rotations, root=0)
 
     def select_synapse_idx(self, cell, pop_type, idx, layer):
-        """Endbulbs land on the soma and proximal dendrite, per `endbulb_weights`."""
+        """Endbulbs land on the soma and proximal dendrite, per endbulb_weights."""
         return gbc_biophysics.weighted_endbulb_idx(cell, len(idx),
                                                    weights=self.endbulb_weights)
 
@@ -270,7 +272,7 @@ def main():
     COMM.Barrier()
 
     if RANK == 0:
-        figures.plot_all(output_dir, PROBE_Z, PROBE_X, PROBE_Y, side, args.angle,
+        figures.plot_all(output_dir, (PROBE_X, PROBE_Y, PROBE_Z), side, args.angle,
                          args.n_cells, FIGURE_STYLE,
                          stimulus_freq=meta.get('stim_freq_hz'),
                          single_contribs=single_contribs, soma_pos=soma_pos,

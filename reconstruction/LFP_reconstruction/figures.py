@@ -4,14 +4,12 @@ Near-field LFP figures, shared by every nucleus.
 
 One implementation of each of the three plots the LFP pipelines produce:
 
-`plot_compound_lfp`   stacked probe traces + depth/time colour map
-`plot_phase_cycle`    cycle-averaged response and its depth profile (tonal stimuli)
-`plot_single_cells`   per-cell colour map + best-channel trace
+plot_compound_lfp   stacked probe traces and a depth/time colour map
+plot_phase_cycle    cycle-averaged response and its depth profile (tonal stimuli)
+plot_single_cells   per-cell colour map and best-channel trace
 
-These existed as three copies each (MSO, LSO, AVCN), and MNTB/SBC reached them by
-calling a sibling's plotter and then RENAMING the PNGs it wrote.  Everything that
-actually differed between the copies is now a `FigureStyle` field, so a new
-nucleus supplies a style rather than another copy.
+Everything that differs between nuclei is a FigureStyle field, so a new
+nucleus supplies a style rather than another copy of the plotting code.
 """
 
 import os
@@ -32,21 +30,23 @@ from recon_core.signal_utils import time_axis
 class FigureStyle:
     """Everything that differs between the nuclei's LFP figures.
 
-    name          human-readable title prefix, e.g. 'AVCN (GBC)'
-    file_prefix   filename stem, e.g. 'avcn' -> figures/avcn_lfp_*.png
-    trace_scale   'global'      one scale for all channels (MSO, AVCN): keeps the
-                                relative channel amplitudes visible
-                  'per_channel' each channel normalised to its own 99th percentile
-                                (LSO): its axonal signal spans orders of magnitude
-                                across channels, so a global scale flattens most
-                                of the probe into a line
+    name          readable title prefix, e.g. 'AVCN (GBC)'
+    file_prefix   filename stem, e.g. 'avcn' for figures/avcn_lfp_*.png
+    trace_scale   'global'      one scale for all channels (MSO, AVCN), which
+                                keeps the relative channel amplitudes visible
+                  'per_channel' each channel normalised to its own 99th
+                                percentile (LSO), whose axonal signal spans
+                                orders of magnitude across channels
     trace_gain    stacked-trace height as a fraction of the channel spacing
-    blank_onset_ms  zero the first N ms before scaling.  NEURON's finitialize
-                    leaves a one-sample capacitive transient that otherwise sets
-                    the colour scale and blanks the real signal; only the
-                    morphologically detailed bushy cells are affected.
-    index_label   optional callable(gid, n_total) -> str, annotating each
-                  single-cell panel with the tonotopic index that cell stands for
+    blank_onset_ms  zero the first N ms before scaling. NEURON's finitialize
+                    leaves a one-sample capacitive transient that would
+                    otherwise set the colour scale; only the detailed bushy
+                    cells are affected.
+    index_label   optional callable(gid, n_total) returning the tonotopic index
+                  each single-cell panel stands for
+    probe_axis    which model axis the probe runs along, the nucleus's
+                  dendritic axis, so the depth profile follows the current
+                  dipole. 'z' for most nuclei; the LSO's dendrites lie along y.
     """
     name: str
     file_prefix: str
@@ -54,6 +54,15 @@ class FigureStyle:
     trace_gain: float = 70.0
     blank_onset_ms: float = 0.0
     index_label: object = None
+    probe_axis: str = 'z'
+
+    @property
+    def depth_index(self):
+        return 'xyz'.index(self.probe_axis)
+
+    @property
+    def depth_label(self):
+        return f'Probe {self.probe_axis} (µm)'
 
 
 def _figure_path(output_dir, file_prefix, kind):
@@ -73,40 +82,40 @@ def _load(output_dir, style):
     return lfp, srate
 
 
-def _stack_offsets(lfp, probe_z, style):
+def _stack_offsets(lfp, probe_depth, style):
     """Per-channel divisor turning µV into probe-z units for the stacked plot."""
     if style.trace_scale == 'per_channel':
         scale = np.percentile(np.abs(lfp), 99, axis=1, keepdims=True)
-        spacing = (probe_z[-1] - probe_z[0]) / max(len(probe_z) - 1, 1)
+        spacing = (probe_depth[-1] - probe_depth[0]) / max(len(probe_depth) - 1, 1)
         return np.maximum(scale, 1e-9) / (spacing * style.trace_gain)
     return max(np.abs(lfp).max() * 2, 1e-9) / style.trace_gain
 
 
 # ---------------------------------------------------------------------------
-def plot_compound_lfp(output_dir, probe_z, side, angle, n_cells, style):
+def plot_compound_lfp(output_dir, probe_depth, side, angle, n_cells, style):
     """Stacked probe traces beside the depth/time colour map."""
     lfp, srate = _load(output_dir, style)
     tvec = time_axis(lfp.shape[1], srate)
-    divisor = _stack_offsets(lfp, probe_z, style)
+    divisor = _stack_offsets(lfp, probe_depth, style)
     vmax = (float(np.percentile(np.abs(lfp), 99))
             if style.trace_scale == 'per_channel'
             else float(np.abs(lfp).max())) or 1e-9
 
     fig, (ax_traces, ax_map) = plt.subplots(1, 2, figsize=(12, 7),
                                             constrained_layout=True)
-    for ch in range(len(probe_z)):
+    for ch in range(len(probe_depth)):
         offset = divisor[ch] if np.ndim(divisor) else divisor
-        ax_traces.plot(tvec, lfp[ch] / offset + probe_z[ch], color='k', lw=0.6)
+        ax_traces.plot(tvec, lfp[ch] / offset + probe_depth[ch], color='k', lw=0.6)
     ax_traces.set_xlabel('Time (ms)')
-    ax_traces.set_ylabel('Probe z (µm)')
+    ax_traces.set_ylabel(style.depth_label)
     ax_traces.set_title(f'{style.name} compound LFP — stacked traces')
 
     im = ax_map.imshow(lfp, aspect='auto', origin='lower',
-                       extent=[tvec[0], tvec[-1], probe_z[0], probe_z[-1]],
+                       extent=[tvec[0], tvec[-1], probe_depth[0], probe_depth[-1]],
                        cmap='RdBu_r', vmin=-vmax, vmax=vmax)
     plt.colorbar(im, ax=ax_map, label='LFP (µV)')
     ax_map.set_xlabel('Time (ms)')
-    ax_map.set_ylabel('Probe z (µm)')
+    ax_map.set_ylabel(style.depth_label)
     ax_map.set_title(f'{style.name} | side {side} | angle {angle}° | N={n_cells}')
 
     _save(fig, _figure_path(output_dir, style.file_prefix, 'reconstruction'),
@@ -114,14 +123,14 @@ def plot_compound_lfp(output_dir, probe_z, side, angle, n_cells, style):
 
 
 # ---------------------------------------------------------------------------
-def plot_phase_cycle(output_dir, stimulus_freq, probe_z, side, angle, n_cells,
+def plot_phase_cycle(output_dir, stimulus_freq, probe_depth, side, angle, n_cells,
                      style, skip_ms=10.0):
-    """Cycle-averaged LFP and its depth profile — the neurophonic view.
+    """Cycle-averaged LFP and its depth profile, the neurophonic view.
 
     Only meaningful for a periodic stimulus: the response is folded onto one
-    stimulus cycle, which averages away everything not phase-locked to it.  The
-    first `skip_ms` are dropped so the onset ramp does not contaminate the
-    average.  Silently skipped for clicks and noise (no stimulus frequency).
+    stimulus cycle, which averages away everything not phase-locked to it. The
+    first skip_ms are dropped so the onset ramp does not contaminate the
+    average. Silently skipped for clicks and noise, which have no frequency.
     """
     if stimulus_freq is None:
         print('Stimulus frequency unknown; skipping the phase-cycle figure.')
@@ -144,7 +153,7 @@ def plot_phase_cycle(output_dir, stimulus_freq, probe_z, side, angle, n_cells,
 
     phase = np.linspace(0, 1, samples_per_cycle, endpoint=False)
     n_ch = folded.shape[0]
-    spacing = (probe_z[-1] - probe_z[0]) / max(n_ch - 1, 1)
+    spacing = (probe_depth[-1] - probe_depth[0]) / max(n_ch - 1, 1)
     half = samples_per_cycle // 2
     subtitle = f'side {side} | {angle}° | N={n_cells} | {stimulus_freq:.0f} Hz'
 
@@ -153,14 +162,14 @@ def plot_phase_cycle(output_dir, stimulus_freq, probe_z, side, angle, n_cells,
                             (axes[1], centred, f'{style.name} mean-removed | {subtitle}')):
         divisor = (np.abs(data).max() or 1e-9) / spacing
         for ch in range(n_ch):
-            trace = data[ch] / divisor + probe_z[ch]
+            trace = data[ch] / divisor + probe_depth[ch]
             ax.plot(phase, trace, color='gray', lw=0.9)
             # mark the half-cycle and end-of-cycle points, so a phase shift
-            # across depth is visible as a tilt in the marker column
+            # across depth shows up as a tilt in the marker column
             ax.plot(phase[half], trace[half], 'o', color='steelblue', ms=4, zorder=3)
             ax.plot(phase[-1], trace[-1], 'o', color='firebrick', ms=4, zorder=3)
         ax.set_xlabel('Cycle phase')
-        ax.set_ylabel('Probe z (µm)')
+        ax.set_ylabel(style.depth_label)
         ax.set_title(title)
         ax.set_xlim(0, 1)
 
@@ -169,9 +178,9 @@ def plot_phase_cycle(output_dir, stimulus_freq, probe_z, side, angle, n_cells,
         colour, lw, z = ('steelblue', 1.8, 3) if t == half else \
                         ('firebrick', 1.8, 3) if t == samples_per_cycle - 1 else \
                         ('lightgray', 0.6, 1)
-        ax_depth.plot(probe_z, centred[:, t], color=colour, lw=lw, zorder=z)
+        ax_depth.plot(probe_depth, centred[:, t], color=colour, lw=lw, zorder=z)
     ax_depth.axhline(0, color='k', lw=0.5, ls='--', zorder=2)
-    ax_depth.set_xlabel('Probe z (µm)')
+    ax_depth.set_xlabel(style.depth_label)
     ax_depth.set_ylabel('LFP (µV)')
     ax_depth.set_title('Depth profile')
 
@@ -180,16 +189,18 @@ def plot_phase_cycle(output_dir, stimulus_freq, probe_z, side, angle, n_cells,
 
 
 # ---------------------------------------------------------------------------
-def plot_single_cells(output_dir, single_contribs, tvec, probe_z, soma_pos,
-                      probe_x, probe_y, cell_gids, total_sim_cells, style):
-    """One row per sampled cell: full colour map + its strongest channel.
+def plot_single_cells(output_dir, single_contribs, tvec, probe_xyz, soma_pos,
+                      cell_gids, total_sim_cells, style):
+    """One row per sampled cell: full colour map and its strongest channel.
 
     single_contribs : (n_cells, n_ch, n_t) µV
     soma_pos        : (n_cells, 3) µm
-    The soma→probe distance is annotated because it dominates the amplitude —
-    it is the check that near cells, not a numerical artefact, drive the LFP.
+    The soma to probe distance is annotated because it dominates the amplitude,
+    so it shows that near cells and not an artefact drive the LFP.
     """
     n_cells = single_contribs.shape[0]
+    probe_x, probe_y, probe_z = probe_xyz
+    probe_depth = probe_xyz[style.depth_index]
 
     def min_distance(sx, sy, sz):
         return float(np.min(np.sqrt((sx - probe_x) ** 2 + (sy - probe_y) ** 2
@@ -210,9 +221,9 @@ def plot_single_cells(output_dir, single_contribs, tvec, probe_z, soma_pos,
         ax_map = fig.add_subplot(grid[i, 0])
         vmax = np.abs(single_contribs[i]).max() or 1e-9
         ax_map.imshow(single_contribs[i], aspect='auto', origin='lower',
-                      extent=[tvec[0], tvec[-1], probe_z[0], probe_z[-1]],
+                      extent=[tvec[0], tvec[-1], probe_depth[0], probe_depth[-1]],
                       cmap='RdBu_r', vmin=-vmax, vmax=vmax)
-        ax_map.set_ylabel('z (µm)')
+        ax_map.set_ylabel(f'{style.probe_axis} (µm)')
         ax_map.set_title(f'Sim ID {gid}{tag} | soma ({sx:.0f}, {sy:.0f}, {sz:.0f}) µm'
                          f' | d_min = {d_min:.0f} µm')
 
@@ -221,7 +232,8 @@ def plot_single_cells(output_dir, single_contribs, tvec, probe_z, soma_pos,
         ax_trace.plot(tvec, single_contribs[i, best_ch], color='steelblue', lw=0.8)
         ax_trace.set_ylabel('LFP (µV)')
         ax_trace.set_title(f'Sim ID {gid} ch {best_ch} '
-                           f'(z = {probe_z[best_ch]:.0f} µm) | d_min = {d_min:.0f} µm')
+                           f'({style.probe_axis} = {probe_depth[best_ch]:.0f} µm)'
+                           f' | d_min = {d_min:.0f} µm')
         if i == n_cells - 1:
             ax_map.set_xlabel('Time (ms)')
             ax_trace.set_xlabel('Time (ms)')
@@ -233,13 +245,19 @@ def plot_single_cells(output_dir, single_contribs, tvec, probe_z, soma_pos,
     print(f'Single-cell figure saved -> {path}')
 
 
-def plot_all(output_dir, probe_z, probe_x, probe_y, side, angle, n_cells, style,
+def plot_all(output_dir, probe_xyz, side, angle, n_cells, style,
              stimulus_freq=None, single_contribs=None, soma_pos=None,
              cell_gids=None, dt_ms=None):
-    """Every figure a finished LFP run produces, in one call."""
-    plot_compound_lfp(output_dir, probe_z, side, angle, n_cells, style)
-    plot_phase_cycle(output_dir, stimulus_freq, probe_z, side, angle, n_cells, style)
+    """Every figure a finished LFP run produces, in one call.
+
+    probe_xyz is the (x, y, z) channel coordinates; the depth axis plotted
+    against is style.probe_axis, so a nucleus whose probe does not run along z
+    is labelled and plotted correctly without a second code path.
+    """
+    depth = probe_xyz[style.depth_index]
+    plot_compound_lfp(output_dir, depth, side, angle, n_cells, style)
+    plot_phase_cycle(output_dir, stimulus_freq, depth, side, angle, n_cells, style)
     if single_contribs is not None and len(single_contribs):
         tvec = np.arange(single_contribs.shape[2]) * dt_ms
-        plot_single_cells(output_dir, single_contribs, tvec, probe_z, soma_pos,
-                          probe_x, probe_y, cell_gids, n_cells, style)
+        plot_single_cells(output_dir, single_contribs, tvec, probe_xyz, soma_pos,
+                          cell_gids, n_cells, style)

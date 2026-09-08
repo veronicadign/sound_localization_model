@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
 """
-LSO ABR reconstruction via current-dipole moment + 4-sphere head model.
+LSO ABR reconstruction: current dipole moment through the 4-sphere head model.
 
-This is the SPIKING-output ABR generator the scalp BIC reflects (Tolnai et al.):
-each LSO projection neuron is fired one AP per NEST-output spike and the AP travels
-up the ~4 mm ascending-lateral-lemniscus active axon as a moving current dipole
-(main_reconstruct_lso.LSOSpikingPopulation + models/mso/lso_model_active_axon.hoc).
-Contrast with main_abr.py (MSO, synaptic dipole) — the two are the computational
-ablations compared in plots/tolnai.py.
+This is the spiking-output generator the scalp BIC reflects (Tolnai et al.):
+each LSO projection neuron fires one AP per NEST output spike and the AP
+travels up the ~4 mm ascending lateral lemniscus active axon as a moving
+current dipole (main_reconstruct_lso.LSOSpikingPopulation with
+models/mso/lso_model_active_axon.hoc). main_abr.py (MSO, synaptic dipole) is
+the other half of the ablation compared in plots/tolnai.py.
 
-Mirrors main_abr_avcn.py: own anatomical position (LSO_POS_UM) + rotation, the
-whole-cell dipole (soma+dendrites+axon travelling wave) projected ONCE per cell
-through the 4-sphere model (NOT split synaptic/axonal — see main_abr_avcn.py:98).
+Mirrors main_abr_avcn.py: own anatomical position (LSO_POS_UM) and rotation,
+with the whole-cell dipole (soma, dendrites and axonal travelling wave)
+projected once per cell, not split into synaptic and axonal parts (see the
+comment block in main_abr_avcn.py).
 
 CLI (single or MPI):
   python ABR_reconstruction/main_abr_lso.py --pic-file RESULTS/x.pic --angle 0 --side both --n-cells 200
   mpiexec -n 4 python ABR_reconstruction/main_abr_lso.py --itd-us 500 --side both --n-cells 200
 
-Condition selection (mutually exclusive): --angle (default) | --itd-us | --ild-db.
+Condition selection (mutually exclusive): --angle (default), --itd-us, --ild-db.
 
 Outputs:
   RESULTS/abr_tmp/output_lso_{stem}_{cond}_{side}/population_dipole.h5   (per side)
@@ -44,7 +45,7 @@ from recon_core.signal_utils import derive
 
 # LSO populations + model geometry (importing this also loads the mechanisms).
 from LFP_reconstruction.main_reconstruct_lso import (
-    LSOPopulation, LSOSpikingPopulation, HOC_FILE, HOC_FILE_AXON,
+    LSOPopulation, LSOSpikingPopulation, HOC_STUB, HOC_AXON,
     ELLIPSE_RADIUS_X, ELLIPSE_RADIUS_Y, LAYER_BOUNDARIES,
 )
 from LFP_reconstruction.main_reconstruct import _extract_spikes
@@ -53,8 +54,8 @@ DT, TSTOP, SRATE = P.DT, P.TSTOP, P.SRATE
 V_INIT = P.LSO_V_INIT
 N_LSO_TOTAL = P.N_LSO_TOTAL
 
-# The rotation maps the extended LSO axon (build_lso_axon.AXON_DIR) onto the head
-# inferosuperior axis on both sides, mirroring the mediolateral and
+# The rotation maps the extended LSO axon (build_lso_axon.AXON_DIR) onto the
+# head inferosuperior axis on both sides, mirroring the mediolateral and
 # anteroposterior axes per side.
 LSO_POS_UM = P.LSO_POS_UM
 ROTATION = P.ROTATION_LSO
@@ -63,7 +64,7 @@ _pic_stem = paths.pic_stem
 
 
 # ---------------------------------------------------------------------------
-# Condition selection (angle | itd-us | ild-db) -> (.pic key, readable label)
+# Condition selection (angle, itd-us, ild-db) to (.pic key, readable label)
 # ---------------------------------------------------------------------------
 def _condition(args):
     return paths.condition_key(args.angle, getattr(args, 'itd_us', None),
@@ -71,11 +72,11 @@ def _condition(args):
 
 
 # ---------------------------------------------------------------------------
-# Per-side simulation -> population dipole (3, T) nA·µm (rank 0)
+# Per-side simulation, giving a population dipole (3, T) nA.µm on rank 0
 # ---------------------------------------------------------------------------
 def _side_condition(condition, side):
-    """left_ear/right_ear -> per-side {ipsilateral,contralateral} (as main_abr.py).
-    For side L the ipsi ear is 'left'; for side R the ipsi ear is 'right'."""
+    """Map left_ear/right_ear to per-side ipsilateral/contralateral, as main_abr.py.
+    For side L the ipsi ear is 'left'; for side R it is 'right'."""
     if condition == 'binaural':
         return 'binaural'
     if (condition == 'left_ear' and side == 'L') or \
@@ -90,24 +91,24 @@ def _run_one_side(side, args, meta, cond_label):
 
     if spiking:
         pop_class     = LSOSpikingPopulation
-        hoc_file      = HOC_FILE_AXON
+        hoc_file      = HOC_AXON[side]
         rot_axis      = []                   # coherent rostro-dorsal volley
         X_pops        = [f'LSO_{side}']
-        k_yxl_local   = P.LSO_SPIKING_CONVERGENCE   # one suprathreshold synapse -> AIS
+        k_yxl_local   = P.LSO_SPIKING_CONVERGENCE   # one suprathreshold AIS synapse
         j_yx_local, tau_yx_local = P.LSO_SPIKING_J_YX, P.LSO_SPIKING_TAU_YX
         syn_delay_loc, syn_delay_scale = P.LSO_SPIKING_DELAYS, [None]
     else:
-        # SYNAPTIC LSO scalp dipole (analog of the MSO ABR): integrate SBC/MNTBC
-        # currents; monaural via ear-specific silencing (single-layer k_yXL).
+        # Synaptic LSO scalp dipole, the analogue of the MSO ABR: integrate the
+        # SBC/MNTBC currents, monaural via ear-specific silencing (single-layer).
         pop_class     = LSOPopulation
-        hoc_file      = HOC_FILE
+        hoc_file      = HOC_STUB[side]
         rot_axis      = []
         X_pops        = [f'SBC_{side}', f'MNTBC_{side}']
-        k_sbc, k_mntbc = P.LSO_CONVERGENCE[0]   # SBC -> dendrites, MNTBC -> soma
+        k_sbc, k_mntbc = P.LSO_CONVERGENCE[0]   # SBC on dendrites, MNTBC on soma
         sc = _side_condition(args.condition, side)
-        if sc == 'ipsilateral':             # ipsi ear -> keep SBC, drop MNTBC
+        if sc == 'ipsilateral':             # ipsi ear: keep SBC, drop MNTBC
             k_mntbc = 0
-        elif sc == 'contralateral':         # contra ear -> drop SBC, keep MNTBC
+        elif sc == 'contralateral':         # contra ear: drop SBC, keep MNTBC
             k_sbc = 0
         k_yxl_local   = [[k_sbc, k_mntbc]]
         j_yx_local    = P.LSO_J_YX
@@ -186,15 +187,15 @@ def _run_one_side(side, args, meta, cond_label):
     return glob, output_dir
 
 
-# The long (~4 mm) active axon makes finitialize's settling capacitive currents,
-# times the large lever arm, a big SPURIOUS dipole at t≈0 that the zero-phase
-# bandpass rings off. NEST LSO spikes only start >6 ms, so 0–SETTLE_MS is
-# physiologically silent — blank it at the source before projection/filtering.
+# The long (~4 mm) active axon turns finitialize's settling capacitive currents,
+# times the large lever arm, into a big spurious dipole at t=0 that the
+# zero-phase bandpass rings off. NEST LSO spikes only start after 6 ms, so
+# 0 to SETTLE_MS is silent and is blanked before projection and filtering.
 SETTLE_MS = P.SETTLE_MS
 
 
 def _project_and_save(side, p_model, output_dir):
-    """Blank the settling transient, rotate into the head frame, store. -> p_head."""
+    """Blank the settling transient, rotate into the head frame, store p_head."""
     p_model = np.asarray(p_model, dtype=float).copy()
     p_model[:, :int(round(SETTLE_MS / DT))] = 0.0
     p_head = head_model.rotate_to_head(p_model, ROTATION[side])
@@ -203,7 +204,7 @@ def _project_and_save(side, p_model, output_dir):
 
 
 def _apply_head_model(p_head_by_side, output_dir, electrode_names):
-    """Project each side's LSO dipole from its own position, SUM at the scalp."""
+    """Project each side's LSO dipole from its own position and sum at the scalp."""
     lo, hi = P.BAND_TOLNAI
     V_uV, srate = head_model.project_by_side(
         p_head_by_side, LSO_POS_UM, electrode_names, SRATE, lo=lo, hi=hi)
@@ -235,7 +236,7 @@ def _plot_abr(output_dir, V_uV, electrode_names, srate, cond_label, side, n_cell
 
     path = os.path.join(output_dir, 'figures', 'lso_abr.png')
     fig.savefig(path, dpi=150); plt.close(fig)
-    print(f'ABR figure saved → {path}')
+    print(f'ABR figure saved to {path}')
 
 
 def main():
@@ -280,7 +281,7 @@ def main():
         output_dirs[side] = output_dir
         if RANK == 0:
             p_head_by_side[side] = _project_and_save(side, p_model, output_dir)
-            save_dipole_record(stem, args.angle, 'LSO', args.generators, side,
+            save_dipole_record(stem, cond_label, 'LSO', args.generators, side,
                                p_head_by_side[side], LSO_POS_UM[side],
                                N_LSO_TOTAL, args.n_cells, SRATE,
                                condition=args.condition)

@@ -1,37 +1,38 @@
 """
 Curio & Weigel (1990) scalp binaural-interaction (BI) reproduction.
 
-Recreates the human vertex-to-mastoid BAEP under monaural-R, monaural-L and
-binaural-RL click stimulation and the binaural-interaction trace
+Recreates the human vertex-to-mastoid BAEP under monaural R, monaural L and
+binaural RL click stimulation, and the binaural-interaction trace
 
     BI = (RL) - (R + L)                        (Wernick & Starr 1967)
 
-in the paper's two scalp derivations Cz/A1 (=Cz-M1) and Cz/A2 (=Cz-M2), band-pass
-0.15-3 kHz.  The three condition composites are assembled from the standardised
-dipole records (main_abr_full.assemble) — no NEURON is re-run here.
+in the paper's two derivations Cz/A1 (Cz-M1) and Cz/A2 (Cz-M2), band-pass
+0.15-3 kHz. The three condition composites are assembled from the standardised
+dipole records (main_abr_full.assemble); no NEURON is re-run here.
 
-WHY BI = MSO + LSO ONLY.  BI subtracts the summed monaural from the binaural
-response, so any generator whose binaural response equals the sum of its two
-monaural responses cancels exactly.  AVCN and MNTB are monaural by construction
-(each driven by a single ear), so they cancel; the scalp BI therefore arises
-entirely from the binaural coincidence/ILD nuclei MSO and LSO — the SOC origin the
-paper attributes BI to (around wave III+).  This is verified numerically below.
+BI is MSO plus LSO only. Subtracting the summed monaural from the binaural
+response cancels any generator whose binaural response equals the sum of its
+two monaural ones. AVCN and MNTB are monaural by construction, each driven by
+a single ear, so they cancel and the scalp BI comes entirely from the binaural
+nuclei MSO and LSO, the SOC origin the paper attributes BI to (around wave III
+and later). This is verified numerically below.
 
-MONAURAL = post-hoc silencing of the binaural pic (main_abr.py/_run_one_side
---condition), so the LSO uses its SYNAPTIC generator (the spiking output volley
-cannot be un-mixed post-hoc).  AVCN/MNTB reuse their binaural records restricted to
-the ear-driven hemisphere (main_abr_full._discover ear->side rule).
+Monaural conditions come from post-hoc silencing of the binaural pic
+(main_abr.py/_run_one_side --condition), so the LSO uses its synaptic
+generator: a spiking output volley cannot be un-mixed afterwards. AVCN and
+MNTB reuse their binaural records restricted to the ear-driven hemisphere
+(the ear to side rule in main_abr_full._discover).
 
 Prerequisite records (run once, full N, both sides) in
-RESULTS/abr_tmp/dipoles/<stem>_angle<A>/ :
+RESULTS/abr_tmp/dipoles/<stem>_angle<A>/ (the <cond> the producers used):
   binaural           MSO, LSO(synaptic), AVCN(GBC+SBC), MNTB(principal+calyx)
   right_ear/left_ear MSO, LSO(synaptic)
   (main_abr.py --condition {right_ear,left_ear};
    main_abr_lso.py --generators synaptic --condition {right_ear,left_ear})
 
 Output:
-  RESULTS/abr_tmp/output_bi_<stem>_angle<A>/BI.h5   (R,L,RL,BI + per-nucleus BI)
-  .../figures/curio_weigel_bi.png                   (Cz/A1 & Cz/A2 x R,L,RL,BI)
+  RESULTS/abr_tmp/output_bi_<stem>_angle<A>/BI.h5   (R, L, RL, BI + per-nucleus BI)
+  .../figures/curio_weigel_bi.png                   (Cz/A1 and Cz/A2 x R, L, RL, BI)
 
 Usage:
   python ABR_reconstruction/main_abr_bi.py --pic-file RESULTS/click_70dBbaseline.pic --angle 0
@@ -54,14 +55,14 @@ from ABR_reconstruction.main_abr_full import assemble, ELECTRODES, _derive
 
 _pic_stem = paths.pic_stem
 
-# paper conditions -> our assemble() condition keys
+# paper conditions to our assemble() condition keys
 CONDITIONS = {'RL': 'binaural', 'R': 'right_ear', 'L': 'left_ear'}
 DERIVATIONS = ['Cz-M1', 'Cz-M2']        # Cz/A1, Cz/A2
 DERIV_LABEL = {'Cz-M1': 'Cz/M1', 'Cz-M2': 'Cz/M2'}
 
 
 def _bi(a, b, c):
-    """Binaural-interaction: RL - (R + L), elementwise."""
+    """Binaural interaction: RL - (R + L), elementwise."""
     return a - (b + c)
 
 
@@ -77,16 +78,17 @@ def main():
     args = ap.parse_args()
 
     stem = _pic_stem(paths.resolve_pic(args.pic_file))
+    _, cond_label = paths.condition_key(args.angle)
     lo, hi = (float(x) for x in args.band.split(','))
     band = (lo, hi)
 
     # --- assemble the three condition composites (all generators, both sides) ---
     comp, nuc, srate = {}, {}, None
     for tag, cond in CONDITIONS.items():
-        V_gen, V_nuc, sr = assemble(stem, args.angle, None, ['L', 'R'], cond,
+        V_gen, V_nuc, sr = assemble(stem, cond_label, None, ['L', 'R'], cond,
                                     lso_generator=args.lso_generator, band=band)
         comp[tag] = V_gen['composite']          # (n_e, T) µV
-        nuc[tag]  = V_nuc                        # nucleus -> (n_e, T) µV
+        nuc[tag]  = V_nuc                        # nucleus to (n_e, T) µV
         srate = sr
         print(f'{tag:2s} ({cond}): generators {sorted(k for k in V_gen if k!="composite")}')
 
@@ -98,26 +100,26 @@ def main():
         z = np.zeros_like(bi_comp)
         bi_nuc[nm] = _bi(nuc['RL'].get(nm, z), nuc['R'].get(nm, z), nuc['L'].get(nm, z))
 
-    # --- validation: AVCN/MNTB cancel; BI ≈ MSO_BI + LSO_BI ---
+    # --- validation: AVCN/MNTB cancel, so BI is about MSO_BI + LSO_BI ---
     binaural_only = sum(bi_nuc.get(nm, np.zeros_like(bi_comp)) for nm in ('MSO', 'LSO'))
     resid = np.max(np.abs(bi_comp - binaural_only))
     print(f'\n[validation] max|BI - (MSO_BI + LSO_BI)| = {resid:.3e} µV '
-          f'(AVCN/MNTB should cancel → ~0)')
+          f'(AVCN/MNTB should cancel to ~0)')
     for nm in all_nuc:
         cz = ELECTRODES.index('Cz')
         print(f'    per-nucleus BI  {nm:<5s} peak|Cz| = {np.abs(bi_nuc[nm][cz]).max():.3e} µV')
 
-    # --- wave-III / wave-V ancillary latencies (paper's IIIR, VL lines) ---
-    # Model wave→generator: III ≈ AVCN (GBC crossing-axon volley), V ≈ LSO (SOC
-    # output).  III taken from the RIGHT-ear response, V from the LEFT-ear — as the
-    # paper marks IIIR (right monaural) and VL (left monaural) throughout Fig. 2.
+    # --- wave III and wave V ancillary latencies (the paper's IIIR, VL lines) ---
+    # Wave to generator here: III is the AVCN crossing-axon volley, V the LSO
+    # (SOC output). III is taken from the right-ear response and V from the
+    # left-ear one, as the paper marks IIIR and VL throughout Fig. 2.
     t = np.arange(bi_comp.shape[1]) / srate * 1e3
     cz = ELECTRODES.index('Cz')
 
     def _peak_ms(trace, win):
-        # largest-|amplitude| peak within a latency window (standard ABR peak-
-        # picking; the raw generator traces are multiphasic so a global argmax can
-        # land on a late rebound lobe).
+        # largest peak by amplitude within a latency window (standard ABR peak
+        # picking; the raw generator traces are multiphasic, so a global argmax
+        # can land on a late rebound lobe).
         m = (t >= win[0]) & (t <= win[1])
         a = np.where(m, np.abs(trace[cz]), 0.0)
         return float(t[int(np.argmax(a))])
@@ -130,7 +132,7 @@ def main():
     # --- save ---
     # No side suffix: the BI is a whole-head measure, both sides always included.
     out_dir = paths.make_output_dirs(
-        os.path.join(paths.ABR_TMP_DIR, f'output_bi_{stem}_angle{args.angle}'),
+        os.path.join(paths.ABR_TMP_DIR, f'output_bi_{stem}_{cond_label}'),
         subdirs=('figures',))
     with h5py.File(os.path.join(out_dir, 'BI.h5'), 'w') as f:
         for tag in ('R', 'L', 'RL'):
@@ -144,13 +146,13 @@ def main():
                        band=f'{lo}-{hi} Hz', lso_generator=args.lso_generator,
                        bi_residual_uV=float(resid),
                        wave_III_R_ms=t_III, wave_V_L_ms=t_V)
-    print(f'BI.h5 saved → {out_dir}')
+    print(f'BI.h5 saved to {out_dir}')
 
     _plot_fig2(out_dir, comp, bi_comp, srate, band)
 
 
 def _plot_fig2(out_dir, comp, bi_comp, srate, band):
-    """Paper Fig. 2 scalp layout: rows = {Cz/A1, Cz/A2}, cols = {R, L, RL, BI}."""
+    """Paper Fig. 2 layout: rows are {Cz/A1, Cz/A2}, columns {R, L, RL, BI}."""
     t = np.arange(bi_comp.shape[1]) / srate * 1e3
     cols = ['R', 'L', 'RL', 'BI']
     traces = dict(comp); traces['BI'] = bi_comp
@@ -159,7 +161,7 @@ def _plot_fig2(out_dir, comp, bi_comp, srate, band):
 
     fig, axes = plt.subplots(len(DERIVATIONS), len(cols),
                              figsize=(13, 3.6), sharex=True, constrained_layout=True)
-    # shared y-scale within R/L/RL (they are comparable); BI on its own scale
+    # shared y-scale within R/L/RL, which are comparable; BI on its own scale
     rl_max = max(np.abs(_derive(traces[c], ELECTRODES, DERIVATIONS[0])[0]).max()
                  for c in ('R', 'L', 'RL'))
     for i, deriv in enumerate(DERIVATIONS):
@@ -182,7 +184,7 @@ def _plot_fig2(out_dir, comp, bi_comp, srate, band):
                  f'|  vertex-positive up', fontsize=10, fontweight='bold')
     path = os.path.join(out_dir, 'figures', 'curio_weigel_bi.png')
     fig.savefig(path, dpi=150); plt.close(fig)
-    print(f'figure saved → {path}')
+    print(f'figure saved to {path}')
 
 
 if __name__ == '__main__':

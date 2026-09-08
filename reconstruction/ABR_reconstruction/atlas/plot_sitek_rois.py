@@ -2,7 +2,7 @@
 """Overlay the Sitek 2019 ROIs on the MNI152 template (route A sanity figure).
 
     python ABR_reconstruction/atlas/plot_sitek_rois.py
--> RESULTS/atlas_validation/figures/sitek_rois.png
+writes RESULTS/atlas_validation/figures/sitek_rois.png
 """
 
 import os
@@ -17,8 +17,8 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(_HERE))
 sys.path.insert(0, PACKAGE_ROOT)
 
-# reconstruction/ is two levels up; adding it lets the atlas scripts share
-# the pipeline's own notion of where the repository is.
+# reconstruction/ is a couple of levels up; put it on sys.path so the atlas
+# scripts share the pipeline's own repository root.
 from recon_core.paths import REPO_ROOT                            # noqa: E402
 sys.path.insert(0, _HERE)
 

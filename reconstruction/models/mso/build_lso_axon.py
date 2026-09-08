@@ -1,26 +1,29 @@
 """
-Generate `lso_model_active_axon.hoc` — the LSO principal cell with an ascending
-lateral-lemniscus (LL) active axon replacing the 150 um silent stub of
-`lso_model_active.hoc`.
+Generate lso_model_active_axon.hoc: the LSO principal cell with an ascending
+lateral lemniscus (LL) active axon replacing the 150 um silent stub of
+lso_model_active.hoc.
 
-WHY: the Tolnai-BIC generator is the LSO projection neuron's SPIKING output,
-carried up the LL as a travelling-wave current dipole. That requires (a) the cell
-to fire an AP and (b) a millimetre-scale active axon for the AP to propagate over
-(the 150 um stub behaves as a near-stationary point source). This script keeps the
-soma + dendrites and appends an AIS + node/internode myelinated cable (active nodes,
-passive myelin), all inline biophysics so `LFPy.Cell(morphology=file)` loads a
-fully-decorated, self-contained cell (no custom_fun needed) and tracks every
-section for the CurrentDipoleMoment.
+The Tolnai BIC generator is the LSO projection neuron's spiking output, carried
+up the LL as a travelling-wave current dipole. That needs the cell to fire an AP
+and a millimetre-scale active axon for the AP to propagate over, since the
+150 um stub behaves as a near-stationary point source. This script keeps the
+soma and dendrites and appends an AIS plus a node/internode myelinated cable
+(active nodes, passive myelin), with all biophysics inline so
+LFPy.Cell(morphology=file) loads a fully decorated, self-contained cell with no
+custom_fun and tracks every section for the CurrentDipoleMoment.
 
-ANATOMY (model axes: x=dorsoventral, y=rostrocaudal, z=mediolateral):
-  * Primary dendrites lie in the parasagittal (y-x) plane, predominantly
-    ROSTROCAUDAL -> drawn along +-y (dend_A/B, 400 um); dend_C is a minor dorsal
-    (+x) branch. Tonotopy is mediolateral (z), perpendicular to the dendritic sheet.
-  * The axon exits ROSTRO-DORSALLY (+y rostral, +x dorsal) and ascends the LL
-    toward the IC; ABR ROTATION maps AXON_DIR onto the head inferosuperior axis.
+Anatomy (model axes: x dorsoventral, y rostrocaudal, z mediolateral):
+  Primary dendrites lie in the parasagittal (y-x) plane, predominantly
+  rostrocaudal, so they are drawn along +-y (dend_A/B, 400 um). The cell is
+  strictly bipolar, two opposed primaries and nothing else, so its dendritic
+  dipole has no built-in asymmetry. Tonotopy is mediolateral (z), perpendicular
+  to the dendritic sheet.
+  The axon exits rostro-dorsally (+y rostral, +x dorsal) and ascends the LL
+  toward the IC; the ABR rotation maps AXON_DIR onto the head inferosuperior
+  axis.
 
 Usage:
-  python models/mso/build_lso_axon.py            # -> lso_model_active_axon.hoc
+  python models/mso/build_lso_axon.py            # writes lso_model_active_axon.hoc
 """
 
 import os
@@ -28,18 +31,36 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# --- orientation (model unit vectors: x=dorsoventral, y=rostrocaudal, z=mediolat)
+# One morphology per side. See axon_dir() for why the left cell is mirrored.
+AXON_HOC = {'R': 'lso_model_active_axon.hoc', 'L': 'lso_model_active_axon_left.hoc'}
+STUB_HOC = {'R': 'lso_model_active.hoc', 'L': 'lso_model_active_left.hoc'}
+
+# --- orientation (model unit vectors: x dorsoventral, y rostrocaudal, z mediolateral)
 DEND_A_DIR = np.array([0., 1., 0.])              # +y rostral
 DEND_B_DIR = np.array([0., -1., 0.])             # -y caudal
-DEND_C_DIR = np.array([1., 0., 0.])              # +x dorsal (minor branch)
 AXON_DIR   = np.array([1., 1., 0.]); AXON_DIR /= np.linalg.norm(AXON_DIR)  # rostro-dorsal
 
-SOMA_HALF  = 13.5      # um  soma half-length (elongated along y = dendritic axis)
+
+def axon_dir(side='R'):
+    """Model-frame axon direction for one side.
+
+    The left cell is the mirror image of the right one (model x negated), not
+    the same cell rotated. That is what lets both sides send their lemniscal
+    axon to head +z and keep tonotopy and the dendritic tilt mirror-symmetric:
+    with a single un-mirrored morphology only two of the three can hold at
+    once, since a proper rotation cannot reproduce a reflection. Everything
+    else in the cell lies on y or is radial, so mirroring x moves only the axon.
+    """
+    d = AXON_DIR.copy()
+    if side == 'L':
+        d[0] = -d[0]
+    return d
+
+SOMA_HALF  = 13.5      # um  soma half-length, elongated along y (dendritic axis)
 SOMA_DIA   = 12.0
 DEND_LEN   = 400.0
-DENDC_LEN  = 213.0
 
-# --- axon geometry (µm) — literature-placeholder mammalian myelinated fibre ----
+# --- axon geometry (µm), a literature placeholder mammalian myelinated fibre ---
 AIS_LEN       = 25.0
 AIS_DIAM      = 1.5
 FIBER_DIAM    = 1.5     # internode (myelinated) diameter
@@ -48,14 +69,14 @@ NODE_LEN      = 1.0
 INTERNODE_LEN = 150.0
 AXON_LENGTH   = 4000.0  # total extension toward the IC along the LL
 
-# --- biophysics (S/cm2) — active node/AIS = LSO axon densities; passive myelin --
+# --- biophysics (S/cm2): active node/AIS at LSO axon densities, passive myelin --
 RA   = 150.0
 ENA  = 55.0
 EK   = -77.0
 EPAS = -63.0
 
 ACTIVE = dict(gpas=2.0e-3, cm=1.0, nax=0.50, klt=0.010, kht=0.015, ih=0.0005)
-MYELIN = dict(gpas=1.0e-5, cm=0.01)   # low capacitance + high Rm -> fast saltation
+MYELIN = dict(gpas=1.0e-5, cm=0.01)   # low capacitance, high Rm, so fast saltation
 
 
 def _pt3d(p0, p1, d0, d1):
@@ -99,18 +120,19 @@ def _dend_block(name, direction, length, d0, d1, nseg, connect_stmt, start=None)
 
 
 def build(out_path, length=AXON_LENGTH, internode_len=INTERNODE_LEN,
-          node_len=NODE_LEN, verbose=True):
+          node_len=NODE_LEN, verbose=True, side='R'):
     n = int(round(length / (internode_len + node_len)))
+    axis = axon_dir(side)
     L = []
     L.append('// LSO principal cell + ascending lateral-lemniscus ACTIVE axon.')
-    L.append('// Generated by models/mso/build_lso_axon.py — DO NOT edit by hand.')
+    L.append('// Generated by models/mso/build_lso_axon.py. Do not edit by hand.')
     L.append('// Dendrites: parasagittal (y-x) plane, primaries along +-y (rostrocaudal).')
-    L.append(f'// Axon: rostro-dorsal AXON_DIR={np.round(AXON_DIR,3).tolist()}'
+    L.append(f'// Axon ({side} side): axis={np.round(axis,3).tolist()}'
              f' (+y rostral, +x dorsal); AIS + {n} x (internode {internode_len:g} um'
              f' + node {node_len:g} um) ~= {AIS_LEN + n*(internode_len+node_len):.0f} um.')
     L.append('// Active nodes/AIS (nax); passive low-cm myelin internodes.')
     L.append('')
-    L.append('create soma, dend_A, dend_B, dend_C, ais')
+    L.append('create soma, dend_A, dend_B, ais')
     L.append(f'create node[{n}], internode[{n}]')
     L.append('objref axon_nodes, axon_internodes')
     L.append('axon_nodes      = new SectionList()')
@@ -119,7 +141,7 @@ def build(out_path, length=AXON_LENGTH, internode_len=INTERNODE_LEN,
     L.append('access soma')
     L.append('')
 
-    # soma — elongated along y (dendritic axis)
+    # soma, elongated along y (dendritic axis)
     sp0 = np.array([0., -SOMA_HALF, 0.]); sp1 = np.array([0., SOMA_HALF, 0.])
     L += ['// soma (L = 27 um, dia = 12 um), elongated along y', 'soma {',
           '    nseg = 1', '    Ra   = 150', '    cm   = 1.0',
@@ -133,35 +155,33 @@ def build(out_path, length=AXON_LENGTH, internode_len=INTERNODE_LEN,
     L += _pt3d(sp0, sp1, SOMA_DIA, SOMA_DIA)
     L += ['}', '']
 
-    # dendrites — primaries +-y from soma poles, dend_C dorsal (+x) from soma mid
+    # dendrites: two opposed primaries, +-y from the soma poles
     dblocks = [
         _dend_block('dend_A', DEND_A_DIR, DEND_LEN, 3.5, 1.5, 29,
                     'connect dend_A(0), soma(1)', start=sp1),
         _dend_block('dend_B', DEND_B_DIR, DEND_LEN, 3.5, 1.5, 29,
                     'connect dend_B(0), soma(0)', start=sp0),
-        _dend_block('dend_C', DEND_C_DIR, DENDC_LEN, 3.0, 1.5, 15,
-                    'connect dend_C(0), soma(0.5)', start=[0., 0., 0.]),
     ]
     for block, _ in dblocks:
         L += block + ['']
 
-    # AIS — emerges rostro-dorsally from the soma centre along AXON_DIR
-    a_start = AXON_DIR * SOMA_HALF
-    a_end   = a_start + AXON_DIR * AIS_LEN
+    # AIS, emerging rostro-dorsally from the soma centre along axis
+    a_start = axis * SOMA_HALF
+    a_end   = a_start + axis * AIS_LEN
     L += ['// Axon initial segment (active, high Na for AP initiation)', 'ais {',
           '    nseg = 5', _active_block()]
     L += _pt3d(a_start, a_end, AIS_DIAM, AIS_DIAM)
     L += ['}', '']
 
-    # node/internode cable along AXON_DIR: internode_i then node_i
+    # node/internode cable along axis: internode_i then node_i
     pos = a_end.copy()
     for i in range(n):
-        p_in0, p_in1 = pos.copy(), pos + AXON_DIR * internode_len
+        p_in0, p_in1 = pos.copy(), pos + axis * internode_len
         L += [f'internode[{i}] {{', '    nseg = 5', _myelin_block()]
         L += _pt3d(p_in0, p_in1, FIBER_DIAM, FIBER_DIAM)
         L += ['    axon_internodes.append()', '}']
         pos = p_in1
-        p_nd0, p_nd1 = pos.copy(), pos + AXON_DIR * node_len
+        p_nd0, p_nd1 = pos.copy(), pos + axis * node_len
         L += [f'node[{i}] {{', '    nseg = 1', _active_block()]
         L += _pt3d(p_nd0, p_nd1, NODE_DIAM, NODE_DIAM)
         L += ['    axon_nodes.append()', '}']
@@ -186,17 +206,21 @@ def build(out_path, length=AXON_LENGTH, internode_len=INTERNODE_LEN,
         f.write('\n'.join(L))
     if verbose:
         total = AIS_LEN + n * (internode_len + node_len)
-        print(f'Wrote {out_path}: soma+3 dend (dends || y) + AIS + {n} nodes + {n} '
-              f'internodes (~{total:.0f} um axon along {np.round(AXON_DIR,3).tolist()})')
+        print(f'Wrote {out_path}: soma+2 dend (bipolar, dends || y) + AIS + {n} nodes + {n} '
+              f'internodes (~{total:.0f} um axon along {np.round(axis,3).tolist()})')
     return out_path
 
 
 if __name__ == '__main__':
     import argparse
     ap = argparse.ArgumentParser(description='Bake the extended-axon LSO hoc')
-    ap.add_argument('--out', default=os.path.join(HERE, 'lso_model_active_axon.hoc'))
+    ap.add_argument('--out', default=None,
+                    help='output hoc (default: the per-side name below)')
+    ap.add_argument('--side', default='both', choices=['R', 'L', 'both'])
     ap.add_argument('--length', type=float, default=AXON_LENGTH)
     ap.add_argument('--internode-len', type=float, default=INTERNODE_LEN,
                     dest='internode_len')
     a = ap.parse_args()
-    build(a.out, length=a.length, internode_len=a.internode_len)
+    for side in (['R', 'L'] if a.side == 'both' else [a.side]):
+        out = a.out or os.path.join(HERE, AXON_HOC[side])
+        build(out, length=a.length, internode_len=a.internode_len, side=side)

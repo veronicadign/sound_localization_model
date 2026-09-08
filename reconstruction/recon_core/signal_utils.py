@@ -1,10 +1,10 @@
 """
 Signal processing shared by the LFP and ABR pipelines and their figure scripts.
 
-Deliberately free of pipeline imports (no `params`, no NEURON), so a plot script
-can use it without paying for the NEST-parameter bridge.  Sample rates are passed
-in explicitly rather than derived from a global `DT` — every consumer either has
-`DT` to hand or reads `srate` back from the HDF5 file it just opened.
+Free of pipeline imports (no params, no NEURON), so a plot script can use it
+without paying for the NEST parameter bridge. Sample rates are passed in
+explicitly: every caller either has DT to hand or reads srate back from the
+HDF5 file it just opened.
 """
 
 import numpy as np
@@ -19,13 +19,13 @@ def srate_from_dt(dt_ms):
 def bandpass(signal, fs, lo=150., hi=None, order=4):
     """Zero-phase Butterworth filter, applied row-wise to a (n, T) array.
 
-    `hi=None` gives a high-pass at `lo`.  Zero-phase (`sosfiltfilt`) matters here:
-    an ABR is read by peak latency, and a causal filter would shift it.
+    hi=None gives a high-pass at lo. Zero phase (sosfiltfilt) matters because
+    an ABR is read by peak latency and a causal filter would shift it.
 
     Filtering is linear with a fixed kernel, so callers may sum the filtered
-    outputs of several sources instead of filtering their sum — that identity is
-    what lets `head_model.superpose_sources` return per-generator traces that are
-    still safe to add up.
+    outputs of several sources instead of filtering their sum. That is what
+    lets head_model.superpose_sources return per-generator traces that can
+    still be added up.
     """
     if hi is None:
         sos = scipy.signal.butter(order, lo, btype='high', fs=fs, output='sos')
@@ -40,7 +40,7 @@ def bandpass(signal, fs, lo=150., hi=None, order=4):
 def derive(V, electrode_names, kind='Cz-M1'):
     """Scalp derivation from a (n_electrodes, T) array.
 
-    Returns `(trace, label)`.  Clinical BAEP convention: vertex-positive upward,
+    Returns (trace, label). Clinical BAEP convention is vertex positive upward,
     so every derivation is Cz minus a mastoid reference.
     """
     idx = {name: i for i, name in enumerate(electrode_names)}
@@ -62,10 +62,10 @@ def derive(V, electrode_names, kind='Cz-M1'):
 
 
 def onset_peak(trace, t_ms, window=(1.0, 15.0)):
-    """Largest |deflection| inside `window` → `(latency_ms, signed_amplitude)`.
+    """Largest deflection inside window, as (latency_ms, signed_amplitude).
 
-    The onset peak, not the global extremum: an ABR's later waves are often
-    larger, and the window is what pins the measurement to the wave of interest.
+    The onset peak, not the global extremum: later ABR waves are often larger,
+    and the window pins the measurement to the wave of interest.
     """
     t = np.asarray(t_ms, dtype=float)
     mask = (t >= window[0]) & (t <= window[1])
@@ -77,10 +77,10 @@ def onset_peak(trace, t_ms, window=(1.0, 15.0)):
 
 
 def onset_latency(trace, t_ms, frac=0.3, skip_ms=1.0):
-    """First time |trace| exceeds `frac` of its own peak, after `skip_ms`.
+    """First time |trace| exceeds frac of its own peak, after skip_ms.
 
-    More robust than peak latency for *ordering* generators, because it does not
-    depend on waveform shape.  `skip_ms` steps over the band-pass edge transient.
+    More robust than peak latency for ordering generators, since it does not
+    depend on waveform shape. skip_ms steps over the band-pass edge transient.
     """
     t = np.asarray(t_ms, dtype=float)
     mask = t > skip_ms

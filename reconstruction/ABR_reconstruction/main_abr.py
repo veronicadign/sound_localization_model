@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MSO ABR reconstruction via current-dipole moment + 4-sphere head model.
+MSO ABR reconstruction: current dipole moment through the 4-sphere head model.
 
 CLI:
   python ABR_reconstruction/main_abr.py [options]
@@ -14,19 +14,19 @@ Options:
   --derivation Cz-M1|Cz-M2|Cz-avg  Differential to plot (default: Cz-M1)
   --condition binaural|left_ear|right_ear  Acoustic condition (default: binaural)
 
-Outputs saved to RESULTS/abr_tmp/output_<stem>_angle<A>_<side>/:
-  ABR.h5                   — scalp potentials (n_electrodes, n_t), mV
-  population_dipole.h5     — population dipole moment (3, n_t), nA·µm
-  figures/mso_abr.png      — ABR waveforms + differentials
-  figures/mso_abr_phase_cycle.png  — phase-averaged ABR
+Outputs go to RESULTS/abr_tmp/output_<stem>_angle<A>_<side>/:
+  ABR.h5                   scalp potentials (n_electrodes, n_t), mV
+  population_dipole.h5     population dipole moment (3, n_t), nA.µm
+  figures/mso_abr.png      ABR waveforms and differentials
+  figures/mso_abr_phase_cycle.png  phase-averaged ABR
 
-Unit conventions (all lfpykit-native, no conversion needed):
+Units are lfpykit native, with no conversion needed:
   Positions / electrode coords : µm
-  Dipole moment (CurrentDipoleMoment output) : nA·µm
-  FourSphereVolumeConductor input p : nA·µm
+  Dipole moment (CurrentDipoleMoment output) : nA.µm
+  FourSphereVolumeConductor input p : nA.µm
   FourSphereVolumeConductor input dipole_location : µm
   FourSphereVolumeConductor output : mV
-  Saved / plotted ABR : µV  (× 1000 from mV)
+  Saved / plotted ABR : µV (mV x 1000)
 """
 
 import os
@@ -68,36 +68,34 @@ save_dipole_record = io_utils.save_dipole_record
 
 
 def _bandpass(signal, lo=150., hi=None, fs=None, order=4):
-    """Backwards-compatible wrapper; new code calls signal_utils.bandpass."""
+    """Wrapper kept for older callers; new code calls signal_utils.bandpass."""
     return bandpass(signal, fs=fs or SRATE, lo=lo, hi=hi, order=order)
 
 
 def superpose_sources(sources, electrode_names, hi=3000., lo=150.):
-    """Kept for the figure scripts: `sources` are (label, side, p_head, r)."""
+    """Kept for the figure scripts: sources are (label, side, p_head, r)."""
     return (head_model.superpose_sources(
         [(label, p_head, r) for label, _side, p_head, r in sources],
         electrode_names, SRATE, lo=lo, hi=hi), SRATE)
 
 
 def _inh_tag(args):
-    """Directory suffix marking an inhibition-blocked run ('' when inhibition intact)."""
+    """Directory suffix for an inhibition-blocked run ('' when inhibition intact)."""
     return '_noinh' if getattr(args, 'block_inhibition', False) else ''
 
 
 def _block_inhibition():
-    """Zero the MSO inhibitory synaptic weights (MNTBC + LNTBC).
+    """Zero the MSO inhibitory synaptic weights (MNTBC contra, LNTBC ipsi).
 
-    The conductances that actually reach the cell live in MSOPopulation.PER_POP_SYN,
-    which insert_all_synapses() reads — the J_yX argument does NOT drive them. Note
-    LNTBC is already 0.0 in the model, so MNTBC (contralateral) is the only inhibition
-    genuinely being removed here.
+    The conductances that reach the cell live in MSOPopulation.PER_POP_SYN,
+    which insert_all_synapses() reads. The J_yX argument does not drive them.
     """
     for pop in ('MNTBC', 'LNTBC'):
         MSOPopulation.PER_POP_SYN[pop]['weight'] = 0.0
 
 
 def _side_condition(condition, side):
-    """Return the per-MSO acoustic condition given the stimulated ear and MSO side.
+    """Per-MSO acoustic condition, given the stimulated ear and the MSO side.
 
     condition : 'binaural' | 'left_ear' | 'right_ear'
     side      : 'L' | 'R'
@@ -116,8 +114,8 @@ def _side_condition(condition, side):
 # ---------------------------------------------------------------------------
 def _run_one_side(side, args, meta):
     """
-    Simulate MSO population for one brain side.
-    Returns population dipole (3, T) nA·µm (only meaningful on rank 0)
+    Simulate the MSO population for one brain side.
+    Returns the population dipole (3, T) nA.µm, meaningful on rank 0 only,
     and the output directory path.
     """
     from lfpykit import CurrentDipoleMoment
@@ -127,16 +125,16 @@ def _run_one_side(side, args, meta):
                f'MNTBC_{side}', f'LNTBC_{side}']
     k_yxl_local = [row[:] for row in P.MSO_CONVERGENCE]
     side_cond = _side_condition(args.condition, side)
-    # Silence the inputs the absent ear would have driven, by zeroing that
-    # population's COLUMN — so the surviving counts stay tied to MSO_CONVERGENCE.
+    # Silence the inputs the absent ear would have driven by zeroing that
+    # population's column, so the surviving counts stay tied to MSO_CONVERGENCE.
     #   ipsilateral   ear: contra SBC (col 0) and MNTBC (col 2, contra-driven) off
     #   contralateral ear: ipsi SBC   (col 1) and LNTBC (col 3, ipsi-driven)   off
     _SILENCED = {'ipsilateral': (0, 2), 'contralateral': (1, 3)}
     for col in _SILENCED.get(side_cond, ()):
         for row in k_yxl_local:
             row[col] = 0
-    # NOTE: J_yX does NOT set the synapse conductance — MSOPopulation.insert_all_synapses
-    # overrides it with MSOPopulation.PER_POP_SYN[pop]['weight']. See _block_inhibition().
+    # J_yX does not set the synapse conductance: MSOPopulation.insert_all_synapses
+    # overrides it with PER_POP_SYN[pop]['weight']. See _block_inhibition().
     j_yx_local    = P.MSO_J_YX
     tau_yx_local  = P.MSO_TAU_YX
     syn_delay_loc = P.MSO_DELAYS
@@ -144,7 +142,7 @@ def _run_one_side(side, args, meta):
     pic_file   = paths.resolve_pic(args.pic_file)
     stem       = _pic_stem(pic_file)
     cond, cond_label = _condition(args)
-    # spikes_dir is keyed by the RAW condition value so it matches the cache that
+    # spikes_dir is keyed by the raw condition value so it matches the cache
     # _extract_spikes builds; output_dir uses the readable label.
     spikes_dir = paths.spikes_dir_for(stem, cond, side)
     cond_tag   = f'_{args.condition}' if args.condition != 'binaural' else ''
@@ -207,8 +205,8 @@ def _run_one_side(side, args, meta):
     COMM.Barrier()
 
     # Sum per-cell dipole moments on this rank.
-    # pop.output[i]['CurrentDipoleMoment'] has shape (3, T) float32, nA·µm.
-    # Must grab BEFORE any collect_data() call (not needed here, but for safety).
+    # pop.output[i]['CurrentDipoleMoment'] has shape (3, T) float32, nA.µm.
+    # Must be grabbed before any collect_data() call.
     local_dipole = None
     for i in pop.RANK_CELLINDICES:
         d = pop.output[i]['CurrentDipoleMoment'].astype(np.float64)  # (3, T)
@@ -229,7 +227,7 @@ def _run_one_side(side, args, meta):
 # Head model projection + saving (rank 0 only)
 # ---------------------------------------------------------------------------
 def _project_and_save(side, p_model, output_dir):
-    """Rotate the dipole into the head frame and store it. Returns (p_head, srate)."""
+    """Rotate the dipole into the head frame and store it, as (p_head, srate)."""
     p_head = head_model.rotate_to_head(p_model, ROTATION[side])
     io_utils.write_population_dipole(output_dir, p_head, SRATE)
     return p_head, SRATE
@@ -299,7 +297,7 @@ def _plot_abr(output_dir, V_uV, electrode_names, srate, cond_label, side, n_cell
     fig_path = os.path.join(output_dir, 'figures', 'mso_abr.png')
     fig.savefig(fig_path, dpi=150)
     plt.close(fig)
-    print(f'ABR figure saved → {fig_path}')
+    print(f'ABR figure saved to {fig_path}')
 
     # Second figure: derivation only, more square aspect ratio
     fig2, ax2 = plt.subplots(figsize=(7, 5), constrained_layout=True)
@@ -314,19 +312,18 @@ def _plot_abr(output_dir, V_uV, electrode_names, srate, cond_label, side, n_cell
     fig2_path = os.path.join(output_dir, 'figures', 'mso_abr_derivation.png')
     fig2.savefig(fig2_path, dpi=150)
     plt.close(fig2)
-    print(f'Derivation figure saved → {fig2_path}')
+    print(f'Derivation figure saved to {fig2_path}')
 
 
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 def _condition(args):
-    """Return (condition_value, label) for key lookup and directory/title naming.
+    """Return (condition_value, label) for key lookup and directory naming.
 
-    Without --itd-us: value is the integer angle and label is 'angle{N}', so every
-    derived path and title is IDENTICAL to the pre-ITD behavior. With --itd-us:
-    value is the ITD in seconds (us*1e-6) used for the .pic key lookup, and label
-    is 'itd{us}us' for readable output directories.
+    Without --itd-us the value is the integer angle and the label is
+    'angle{N}'. With --itd-us the value is the ITD in seconds (us * 1e-6) used
+    for the .pic key lookup, and the label is 'itd{us}us'.
     """
     if getattr(args, 'ild_db', None) is not None:
         return float(args.ild_db), f'ild{args.ild_db:g}dB'
@@ -367,7 +364,7 @@ def main():
 
     sides = ['L', 'R'] if args.side == 'both' else [args.side]
 
-    p_head_by_side = {}   # side → (3, T) nA·µm in head coords (rank 0 only)
+    p_head_by_side = {}   # side to (3, T) nA.µm in head coords (rank 0 only)
     output_dirs    = {}
 
     for side in sides:
@@ -382,9 +379,16 @@ def main():
             p_head, _ = _project_and_save(side, global_dipole, output_dir)
             p_head_by_side[side] = p_head
             _stem = _pic_stem(paths.resolve_pic(args.pic_file))
-            save_dipole_record(_stem, args.angle, 'MSO', 'postsynaptic', side,
+            # The variant tag has to reach the record name: records are keyed
+            # <nucleus>__<generator>__<side>__<condition>, so an
+            # inhibition-blocked run would otherwise overwrite the intact
+            # binaural record main_abr_full.py superposes. Tagging it also keeps
+            # the variant out of the composite, which selects on condition.
+            save_dipole_record(_stem, _condition(args)[1], 'MSO',
+                               'postsynaptic', side,
                                p_head, MSO_POS_UM[side], N_CELLS, args.n_cells,
-                               SRATE, condition=args.condition)
+                               SRATE,
+                               condition=f'{args.condition}{_inh_tag(args)}')
 
     if RANK == 0:
         # For bilateral, create a joint output directory

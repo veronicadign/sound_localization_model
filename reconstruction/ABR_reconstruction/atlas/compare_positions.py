@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
-"""Phase 5 - the deliverable: current vs route-A vs route-B nucleus positions.
+"""The deliverable: current, route-A and route-B nucleus positions side by side.
 
-Puts the three candidate sets side by side for every generator the ABR pipeline
-models, in BOTH frames (MNI mm and head-centred mm), so a set can be chosen.
+Puts the three candidate sets next to each other for every generator the ABR
+pipeline models, in both frames (MNI mm and head-centred mm), so a set can be
+chosen.
 
-    CURRENT   the constants the pipeline uses today (head_geometry.py) - since
-              the switch these ARE the adopted atlas values, so the `current`
-              row coincides with whichever candidate was adopted per generator.
-    A         Sitek et al. 2019 MNI atlas.  Absolute, independent, but the SOC is
-              one blob - it gives the SOC/CN anchors, not the subnuclei.
-    B-rel     ANCHOR adult human brainstem.  Subnucleus offsets from the SOC
-              centroid.  Independent, and the only source that splits the SOC.
-    A+B       hybrid: the route-A anchor carrying the route-B offsets.  The set
-              that actually has a per-nucleus number for MSO / LSO / SPN.
+    CURRENT   the constants the pipeline uses today (head_geometry.py). Since
+              the switch these are the adopted atlas values, so the current row
+              coincides with whichever candidate was adopted per generator.
+    A         Sitek et al. 2019 MNI atlas. Absolute and independent, but the
+              SOC is one blob, so it gives the SOC/CN anchors not the subnuclei.
+    B-rel     ANCHOR adult human brainstem. Subnucleus offsets from the SOC
+              centroid. Independent, and the only source that splits the SOC.
+    A+B       hybrid: the route-A anchor carrying the route-B offsets. The set
+              that has a per-nucleus number for MSO, LSO and SPN.
 
-Nothing here modifies the pipeline.  It writes
+Nothing here modifies the pipeline. It writes
     RESULTS/atlas_validation/positions_comparison.csv
     RESULTS/atlas_validation/atlas_candidates.json   (read by head_geometry)
     RESULTS/atlas_validation/figures/positions_compare.png
@@ -36,8 +37,8 @@ ABR_DIR = os.path.dirname(_HERE)
 PACKAGE_ROOT = os.path.dirname(ABR_DIR)
 sys.path.insert(0, PACKAGE_ROOT)
 
-# reconstruction/ is two (or three) levels up; adding it lets the atlas
-# scripts share the pipeline's own notion of where the repository is.
+# reconstruction/ is a couple of levels up; put it on sys.path so the atlas
+# scripts share the pipeline's own repository root.
 from recon_core.paths import REPO_ROOT                            # noqa: E402
 sys.path.insert(0, _HERE)
 sys.path.insert(0, REPO_ROOT)
@@ -49,7 +50,7 @@ import positions_sitek as ps                                      # noqa: E402
 import positions_anchor as pan                                    # noqa: E402
 import fetch_sitek, fetch_anchor                                  # noqa: E402
 
-# pipeline generator -> (label used by route A, label used by route B)
+# pipeline generator to (label used by route A, label used by route B)
 GENERATORS = {
     'MSO':  ('SOC', 'MSO'),
     'LSO':  ('SOC', 'LSO'),
@@ -65,14 +66,14 @@ def _fmt(v):
 
 def build():
     # --- current
-    current = {g: {s: np.asarray(p[s], float) * 1e-3      # um -> mm
+    current = {g: {s: np.asarray(p[s], float) * 1e-3      # um to mm
                    for s in ('L', 'R')}
                for g, p in hg.NUCLEUS_POS_UM.items()}
 
     # --- route A
     sitek = ps.consensus(ps.analyse_all())
 
-    # --- route B (+ hybrid)
+    # --- route B and the hybrid
     meas, _skipped = pan.collect()
     cents = pan.structure_centroids(pan.structure_clouds(meas))
     soc_mni = {s: sitek[('SOC', s)]['centroid_mni_mm'] for s in ('L', 'R')}
@@ -91,7 +92,7 @@ def build():
 
 
 def rows(d):
-    """One row per generator x side x candidate."""
+    """One row per generator, side and candidate."""
     out = []
     for gen, (a_key, b_key) in GENERATORS.items():
         for side in ('R', 'L'):
@@ -171,7 +172,7 @@ def print_report(d, table):
 
 
 def orientation_check(d):
-    """Compare the pipeline's ROTATION matrices with atlas principal axes."""
+    """Compare the pipeline's ROTATION matrices with the atlas principal axes."""
     print()
     print('Orientation cross-check (reported only - no rotation matrix is changed)')
     print('-' * 104)
@@ -186,7 +187,7 @@ def orientation_check(d):
 
     # SOC long axis (route A) vs the model's MSO dendritic axis in head coords.
     soc_axis = bb[('SOC', 'R')]['axes'][:, 0]
-    mso_dend_head = hg.ROTATION_MSO['R'] @ np.array([0., 0., 1.])   # model_z = dendrite
+    mso_dend_head = hg.ROTATION_MSO['R'] @ np.array([0., 0., 1.])   # model_z is the dendrite
     print('  MSO dendritic axis (model_z -> head)  %s' % _fmt(mso_dend_head))
     print('  SOC long axis, Sitek bigbrain (MNI)   %s' % _fmt(soc_axis))
     print('    angle between them: %.1f deg   (the SOC blob elongates along its own long'

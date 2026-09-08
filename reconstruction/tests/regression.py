@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
 """
-Golden-output regression harness for the LFP / ABR reconstruction pipelines.
+Golden-output regression harness for the LFP and ABR reconstruction pipelines.
 
 Runs every entry point at a small cell count against a dedicated stimulus stem,
-then fingerprints every HDF5 array that was produced.  Refactors are proven
-behaviour-preserving by diffing two fingerprints:
+then fingerprints every HDF5 array produced. Refactors are proven behaviour
+preserving by diffing two fingerprints:
 
     python tests/regression.py --label before
     ...refactor...
     python tests/regression.py --label after
     python tests/regression.py --compare before after
 
-The stimulus is a symlink (`RESULTS/_regr_tone12.pic`) rather than the real
-`.pic`, so every output directory carries the `_regr_tone12` stem and can never
-collide with a production run.  The symlink is created on first use.
+The stimulus is a symlink (RESULTS/_regr_tone12.pic) rather than the real .pic,
+so every output directory carries the _regr_tone12 stem and cannot collide with
+a production run. The symlink is created on first use.
 
-Runs are SERIAL by design: under MPI the cells are distributed across ranks, so
-a fingerprint taken with `-n 4` is not comparable to one taken with `-n 1`.
+Runs are serial by design: under MPI the cells are distributed across ranks, so
+a fingerprint taken with -n 4 is not comparable to one taken with -n 1.
 
-Only `.h5` payloads are fingerprinted.  Figures are skipped: single-cell panels
-pick their cells with an unseeded `random.sample`, so the PNGs are legitimately
-non-deterministic while the population HDF5 output is not.
+Only .h5 payloads are fingerprinted. Figures are skipped because single-cell
+panels pick their cells with an unseeded random.sample, so the PNGs are
+legitimately non-deterministic while the population HDF5 output is not.
 """
 
 import argparse
@@ -79,7 +79,7 @@ RUNS = [
     ('abr_lso_syn',    _abr('main_abr_lso.py',  '--n-cells', N_SMALL, '--generators', 'synaptic')),
     ('abr_mntb',       _abr('main_abr_mntb.py', '--n-cells', N_SMALL, '--generators', 'both')),
 
-    # Monaural records — prerequisites for the binaural-interaction reproduction.
+    # Monaural records, prerequisites for the binaural-interaction reproduction.
     ('abr_mso_left',   _abr('main_abr.py', '--n-cells', N_LFP, '--condition', 'left_ear')),
     ('abr_mso_right',  _abr('main_abr.py', '--n-cells', N_LFP, '--condition', 'right_ear')),
     ('abr_lso_left',   _abr('main_abr_lso.py', '--n-cells', N_SMALL, '--generators', 'synaptic',
@@ -215,7 +215,7 @@ def compare(before, after, rtol=0.0):
 
     identical = not (only_a or only_b or changed)
     n_arrays = sum(len(v) for v in a.values())
-    print(f'\n{"IDENTICAL" if identical else "DIFFERENT"} — '
+    print(f'\n{"IDENTICAL" if identical else "DIFFERENT"}: '
           f'{len(a)} files / {n_arrays} arrays in {before["label"]}, '
           f'{len(b)} files in {after["label"]}')
     return identical
@@ -274,7 +274,7 @@ def main():
 
     n_arrays = sum(len(v) for v in payload['fingerprints'].values())
     failed = [k for k, v in runs.items() if v['rc'] != 0]
-    print(f'\n{len(payload["fingerprints"])} files / {n_arrays} arrays → {out}')
+    print(f'\n{len(payload["fingerprints"])} files / {n_arrays} arrays -> {out}')
     if failed:
         print(f'FAILED runs: {", ".join(failed)}')
         sys.exit(1)

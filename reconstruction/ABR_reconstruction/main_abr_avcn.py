@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
 """
-AVCN ABR reconstruction via current-dipole moment + 4-sphere head model.
+AVCN ABR reconstruction: current dipole moment through the 4-sphere head model.
 
-The cochlear nucleus is an early ABR generator (human wave III), upstream of the
-MSO.  This mirrors ABR_reconstruction/main_abr.py but drives morphologically
-detailed bushy-cell populations (AVCNPopulation, ANF endbulb input) and places
-each dipole at the cochlear-nucleus location.
+The cochlear nucleus is an early ABR generator (human wave III), upstream of
+the MSO. This mirrors main_abr.py but drives morphologically detailed
+bushy-cell populations (AVCNPopulation, ANF endbulb input) and places each
+dipole at the cochlear-nucleus location.
 
-Two generators are modelled and, per the request, UNIFIED at the ABR stage:
-  * GBC — globular bushy cell (Type II, VCN_c09 EM), central/caudal VCN.
-  * SBC — spherical bushy cell (Type II-I, SBC_S113 EM), rostral VCN.
-The spherical-cell area occupies the rostral ~1.5-2.0 mm of the nucleus before
-the globular region, so the SBC dipole is placed ~1.5 mm anterior (+head_y) of
-the GBC.  Each population's dipole is projected through the 4-sphere model from
-its OWN position and the scalp potentials are SUMMED — exact linear superposition
-that honours the rostrocaudal offset (a plain vector sum of the two dipole
-moments would only be valid for co-located sources).
+Two generators are modelled and unified at the ABR stage:
+  GBC   globular bushy cell (Type II, VCN_c09 EM), central/caudal VCN
+  SBC   spherical bushy cell (Type II-I, SBC_S113 EM), rostral VCN
+The spherical-cell area occupies the rostral 1.5-2.0 mm of the nucleus before
+the globular region, so the SBC dipole sits ~1.5 mm anterior (+head_y) of the
+GBC. Each population's dipole is projected through the 4-sphere model from its
+own position and the scalp potentials are summed, since a plain vector sum of
+the two dipole moments would only be valid for co-located sources.
 
 CLI (single or MPI):
   python ABR_reconstruction/main_abr_avcn.py --pic-file RESULTS/x.pic \
@@ -58,10 +57,10 @@ DT, TSTOP, SRATE = P.DT, P.TSTOP, P.SRATE
 V_INIT = P.GBC_V_INIT
 N_GBC_TOTAL, N_ENDBULBS = P.N_GBC_TOTAL, P.GBC_ENDBULBS
 
-# The rotation is side-specific so that the GBC axon — aligned ventromedially in
-# the MODEL frame by set_rotations (AXON_TARGET = [-1, 0, -1]) — crosses the
-# midline on BOTH sides, plus the ~32.5° outward rostral tilt of the human
-# cochlear nucleus (Moore/Osen).  _build_rotation(tilt) rebuilds it for
+# The rotation is side-specific so the GBC axon, aligned ventromedially in the
+# model frame by set_rotations (AXON_TARGET = [-1, 0, -1]), crosses the midline
+# on both sides. It also carries the ~32.5 deg outward rostral tilt of the
+# human cochlear nucleus (Moore/Osen). _build_rotation(tilt) rebuilds it for
 # --avcn-tilt-deg.
 from recon_core.head_geometry import (
     AVCN_ROSTRAL_TILT_DEG, build_avcn_rotation as _build_rotation,
@@ -75,49 +74,48 @@ _pic_stem = paths.pic_stem
 
 
 def superpose_sources(sources, electrode_names, hi=3000., lo=150.):
-    """(label, side, p_head, r) sources -> band-passed scalp potentials + srate."""
+    """Turn (label, side, p_head, r) sources into band-passed potentials + srate."""
     return (head_model.superpose_sources(
         [(label, p_head, r) for label, _side, p_head, r in sources],
         electrode_names, SRATE, lo=lo, hi=hi), SRATE)
 
 
 # ---------------------------------------------------------------------------
-# WHY THE DIPOLE IS *NOT* SPLIT INTO SYNAPTIC + AXONAL PARTS
+# Why the dipole is not split into synaptic and axonal parts
 #
-# It is tempting to compute a somatodendritic dipole at the AVCN and a separate
-# axonal (travelling-volley) dipole displaced along the tract.  That is
-# PHYSICALLY INVALID with dipole-only tooling, and it was measured to be so:
+# Computing a somatodendritic dipole at the AVCN and a separate axonal dipole
+# displaced along the tract is invalid with dipole-only tooling, and measurably
+# so:
 #
-#   sum of i_membrane over ALL segments      = 3.0 nA  (= injected current; the
-#                                              cell as a whole conserves charge)
-#   sum over the AXONAL segments alone       = 3.2 nA  (NOT zero)
+#   sum of i_membrane over all segments = 3.0 nA (the injected current; the
+#                                         cell as a whole conserves charge)
+#   sum over the axonal segments alone  = 3.2 nA (not zero)
 #
-# A dipole moment p = sum(r * i) is translation-invariant — i.e. a well-defined
-# dipole — only when the group's NET current is zero.  Each sub-group carries a
-# large net current, so its "dipole" is origin-dependent, and displacing the two
-# groups to different positions drops the monopole terms.  Since q_axon = -q_syn
-# separated by d ~ 3.5 mm, the dropped term is itself a dipole of moment q*d —
-# large, and absent from such a model.  Splitting produced a spurious anti-phase
-# cancellation between the two parts.
+# A dipole moment p = sum(r * i) is translation invariant, and so well defined,
+# only when the group's net current is zero. Each sub-group carries a large net
+# current, so its dipole is origin dependent, and displacing the two groups to
+# different positions drops the monopole terms. With q_axon = -q_syn separated
+# by d ~ 3.5 mm, the dropped term is itself a dipole of moment q*d, which is
+# large. Splitting produced a spurious anti-phase cancellation.
 #
-# The correct treatment with FourSphereVolumeConductor (which models a current
-# DIPOLE, not monopoles) is ONE dipole per cell over all segments: sum(i) = 0
-# makes it well defined, and it ALREADY contains the axonal travelling wave
-# because CurrentDipoleMoment sums every segment, extended axon included.  The
-# only approximation left is the far-field point-dipole placement of a ~4 mm
-# source at 79 mm — a small error.  A genuinely distributed treatment would need
-# monopole (point-source) support in the head model.
+# The correct treatment with FourSphereVolumeConductor, which models a current
+# dipole rather than monopoles, is one dipole per cell over all segments:
+# sum(i) = 0 makes it well defined, and it already contains the axonal
+# travelling wave because CurrentDipoleMoment sums every segment, extended axon
+# included. The remaining approximation is the far-field point-dipole placement
+# of a ~4 mm source at 79 mm. A distributed treatment would need monopole
+# support in the head model.
 # ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
-# Population registry: everything that differs between GBC and SBC.  Defaults in
+# Population registry: everything that differs between GBC and SBC. Defaults in
 # AVCNPopulation reproduce the GBC pipeline, so the GBC entry mostly names them.
 #
 # 'parts' lists the dipole sources a population contributes, each with its own
-# head position.  Both populations contribute ONE whole-cell dipole (see above);
-# they differ in position (SBC 1.5 mm rostral) and in morphology — the GBC uses
-# the EXTENDED active axon so its dipole carries the travelling volley.
+# head position. Both contribute one whole-cell dipole (see above) and differ
+# in position (SBC 1.5 mm rostral) and in morphology: the GBC uses the extended
+# active axon, so its dipole carries the travelling volley.
 # ---------------------------------------------------------------------------
 GBC_EXTENDED_HOC = os.path.join(paths.AVCN_MODELS_DIR, 'morphology',
                                 'extended', 'VCN_c09_extended_axon.hoc')
@@ -128,20 +126,20 @@ POPULATIONS = {
         n_post_total=N_GBC_TOTAL, n_endbulbs=N_ENDBULBS, endbulb_weights=None,
         per_pop_syn=AVCNPopulation.PER_POP_SYN, k_yxl=K_YXL,
         ellipse_y=ELLIPSE_RADIUS_Y, seed=44,
-        parts=[('GBC', None, AVCN_POS_UM)],   # whole-cell dipole (incl. axon)
+        parts=[('GBC', None, AVCN_POS_UM)],   # whole-cell dipole, axon included
     ),
     'sbc': dict(
         label='SBC', morphology=sbc.HOC_FILE_SBC, decorate=sbc._decorate_sbc,
         n_post_total=sbc.N_SBC_TOTAL, n_endbulbs=sbc.N_ENDBULBS,
         endbulb_weights=sbc.ENDBULB_WEIGHTS_SBC, per_pop_syn=sbc.PER_POP_SYN_SBC,
         k_yxl=sbc.K_YXL, ellipse_y=sbc.ELLIPSE_RADIUS_Y, seed=45,
-        parts=[('SBC', None, SBC_POS_UM)],   # None = plain CurrentDipoleMoment
+        parts=[('SBC', None, SBC_POS_UM)],   # None means plain CurrentDipoleMoment
     ),
 }
 
 
 # ---------------------------------------------------------------------------
-# Per-(population, side) simulation -> population dipole (3, T) nA·µm
+# Per-(population, side) simulation, giving a population dipole (3, T) nA.µm
 # ---------------------------------------------------------------------------
 def _run_one_source(pop_name, side, args, meta):
     from lfpykit import CurrentDipoleMoment
@@ -153,9 +151,11 @@ def _run_one_source(pop_name, side, args, meta):
     tau_yx_local = [cfg['per_pop_syn']['ANF']['tau2']]
 
     stem       = _pic_stem(paths.resolve_pic(args.pic_file))
-    spikes_dir = paths.spikes_dir_for(stem, args.angle, side)
+    cond_val, cond_label = paths.condition_key(args.angle, args.itd_us,
+                                              args.ild_db)
+    spikes_dir = paths.spikes_dir_for(stem, cond_val, side)
     output_dir = paths.make_output_dirs(
-        paths.output_dir_for('abr', stem, f'angle{args.angle}', side,
+        paths.output_dir_for('abr', stem, cond_label, side,
                              prefix=pop_name),
         subdirs=('figures',))
 
@@ -170,7 +170,7 @@ def _run_one_source(pop_name, side, args, meta):
         X=X_pops,
     )
 
-    # one probe per dipole part (somatodendritic / axonal, or a single plain one)
+    # one probe per dipole part (somatodendritic, axonal, or a single plain one)
     probes, part_keys = [], []
     for part_label, probe_cls, _pos in cfg['parts']:
         cls = probe_cls or CurrentDipoleMoment
@@ -180,7 +180,7 @@ def _run_one_source(pop_name, side, args, meta):
     pop_label = f'{cfg["label"]}_{side}'
     pop = AVCNPopulation(
         n_syn_per_pop=n_syn_per_pop,
-        axon_target=AXON_TARGET,   # fixed ventromedial (laterality via X_pops)
+        axon_target=AXON_TARGET,   # fixed ventromedial, laterality via X_pops
         n_post_total=cfg['n_post_total'],
         n_endbulbs=cfg['n_endbulbs'],
         endbulb_weights=cfg['endbulb_weights'],
@@ -221,7 +221,7 @@ def _run_one_source(pop_name, side, args, meta):
     pop.run()
     COMM.Barrier()
 
-    # Sum per-cell dipole moments (3, T) nA·µm on this rank, per part
+    # Sum per-cell dipole moments (3, T) nA.µm on this rank, per part
     n_t = int(round(TSTOP / DT)) + 1
     dipoles = {}
     for part_label, out_key in part_keys:
@@ -237,10 +237,10 @@ def _run_one_source(pop_name, side, args, meta):
 
 
 # ---------------------------------------------------------------------------
-# Head-model projection + saving (rank 0)
+# Head-model projection and saving (rank 0)
 # ---------------------------------------------------------------------------
 def _project_and_save(side, dipoles, output_dir):
-    """Rotate each part's dipole into head coords and save. Returns {part: p_head}."""
+    """Rotate each part's dipole into head coords and save, as {part: p_head}."""
     srate = SRATE
     out = {}
     with h5py.File(os.path.join(output_dir, 'population_dipole.h5'), 'w') as f:
@@ -256,16 +256,16 @@ def _project_and_save(side, dipoles, output_dir):
 
 
 def _apply_head_model(sources, output_dir, electrode_names):
-    """Project each source dipole from ITS OWN position and SUM scalp potentials.
+    """Project each source dipole from its own position and sum at the scalp.
 
-    Thin wrapper over the shared ``main_abr.superpose_sources`` (the single
-    canonical 4-sphere superposition, reused by the cross-nucleus composite in
-    main_abr_full.py) that additionally writes this run's ABR.h5.  `sources` is a
-    list of (part_label, side, p_head, r_dipole); sources sharing a part_label
-    (e.g. both sides of one generator) sum.
+    Thin wrapper over main_abr.superpose_sources, the one 4-sphere
+    superposition also used by the cross-nucleus composite in main_abr_full.py,
+    that additionally writes this run's ABR.h5. sources is a list of
+    (part_label, side, p_head, r_dipole); sources sharing a part_label, such as
+    both sides of one generator, are summed.
 
-    Returns (V_by_key, srate); V_by_key maps each part label AND 'composite' to a
-    band-passed scalp potential array (n_electrodes, n_t) in µV.
+    Returns (V_by_key, srate), where V_by_key maps each part label and
+    'composite' to a band-passed (n_electrodes, n_t) array in µV.
     """
     V_out, srate = superpose_sources(sources, electrode_names, hi=3000., lo=150.)
 
@@ -276,16 +276,16 @@ def _apply_head_model(sources, output_dir, electrode_names):
         f.create_dataset('electrode_names', data=np.array(electrode_names, dtype='S'))
         f.attrs['units'] = 'µV'
         f.attrs['keys']  = ','.join(V_out)
-    print(f'ABR saved → {os.path.join(output_dir, "ABR.h5")}  keys={list(V_out)}')
+    print(f'ABR saved to {os.path.join(output_dir, "ABR.h5")}  keys={list(V_out)}')
     return V_out, srate
 
 
 _derivation = derive
 
 
-def _plot_abr(output_dir, V_out, electrode_names, srate, angle, side, n_cells,
-              derivation='Cz-M1'):
-    """Top: Cz for each population + composite. Bottom: composite derivation."""
+def _plot_abr(output_dir, V_out, electrode_names, srate, cond_label, side,
+              n_cells, derivation='Cz-M1'):
+    """Top: Cz per population and composite. Bottom: composite derivation."""
     cz_idx = electrode_names.index('Cz')
     any_V  = next(iter(V_out.values()))
     tvec   = np.arange(any_V.shape[1]) / srate * 1e3
@@ -298,7 +298,7 @@ def _plot_abr(output_dir, V_out, electrode_names, srate, angle, side, n_cells,
                  label=f'{key} (Cz)', zorder=3 if key == 'composite' else 2)
     ax0.axhline(0, color='k', lw=0.4, ls=':')
     ax0.set_ylabel('Cz potential (µV)')
-    ax0.set_title(f'AVCN ABR (SBC + GBC) | angle {angle}° | side {side} | N={n_cells}')
+    ax0.set_title(f'AVCN ABR (SBC + GBC) | {cond_label} | side {side} | N={n_cells}')
     ax0.legend(fontsize=9)
 
     diff, lbl = _derivation(V_out['composite'], electrode_names, derivation)
@@ -310,12 +310,22 @@ def _plot_abr(output_dir, V_out, electrode_names, srate, angle, side, n_cells,
 
     path = os.path.join(output_dir, 'figures', 'avcn_abr.png')
     fig.savefig(path, dpi=150); plt.close(fig)
-    print(f'ABR figure saved → {path}')
+    print(f'ABR figure saved to {path}')
 
 
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+def _cond_value(args):
+    """Raw stimulus key the spike cache is stored under (angle, seconds or dB)."""
+    return paths.condition_key(args.angle, args.itd_us, args.ild_db)[0]
+
+
+def _cond_label(args):
+    """Readable stimulus label for the output directory name."""
+    return paths.condition_key(args.angle, args.itd_us, args.ild_db)[1]
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description='AVCN (SBC + GBC) ABR reconstruction')
@@ -324,6 +334,12 @@ def main():
     parser.add_argument('--side',        type=str, default='L',
                         choices=['L', 'R', 'both'])
     parser.add_argument('--n-cells',     type=int, default=200, dest='n_cells')
+    parser.add_argument('--itd-us', type=float, default=None, dest='itd_us',
+                        help='select an artificial-ITD condition (µs); overrides '
+                             '--angle. The pic key is looked up in seconds.')
+    parser.add_argument('--ild-db', type=float, default=None, dest='ild_db',
+                        help='select an artificial-ILD condition (dB); overrides '
+                             '--itd-us and --angle.')
     parser.add_argument('--generators', type=str, default='both',
                         choices=['gbc', 'sbc', 'both'], dest='generators',
                         help='which bushy-cell generators to model. They are '
@@ -350,10 +366,10 @@ def main():
     pops  = ['gbc', 'sbc'] if args.generators == 'both' else [args.generators]
     stem  = _pic_stem(paths.resolve_pic(args.pic_file))
 
-    # Extract presynaptic spikes once per side (both populations share the ANF drive).
+    # Extract presynaptic spikes once per side; both populations share the ANF drive.
     meta_by_side = {
         side: broadcast_from_root(
-            lambda side=side: _extract_spikes(args.angle, side,
+            lambda side=side: _extract_spikes(_cond_value(args), side,
                                               pic_file=args.pic_file))
         for side in sides
     }
@@ -368,7 +384,8 @@ def main():
                 for part_label, _probe_cls, pos_map in POPULATIONS[pop_name]['parts']:
                     sources.append((part_label, side, p_heads[part_label],
                                     pos_map[side]))
-                    save_dipole_record(stem, args.angle, 'AVCN', part_label, side,
+                    save_dipole_record(stem, _cond_label(args), 'AVCN',
+                                       part_label, side,
                                        p_heads[part_label], pos_map[side],
                                        POPULATIONS[pop_name]['n_post_total'],
                                        args.n_cells, SRATE)
@@ -376,14 +393,15 @@ def main():
     if RANK == 0:
         tag = 'avcn' if len(pops) > 1 else pops[0]
         final_dir = paths.make_output_dirs(
-            paths.output_dir_for('abr', stem, f'angle{args.angle}', args.side,
+            paths.output_dir_for('abr', stem, _cond_label(args), args.side,
                                  prefix=tag),
             subdirs=('figures',))
 
         electrode_names = list(P.ELECTRODES)
         V_out, srate = _apply_head_model(sources, final_dir, electrode_names)
         _plot_abr(final_dir, V_out, electrode_names, srate,
-                  args.angle, args.side, args.n_cells, derivation=args.derivation)
+                  _cond_label(args), args.side, args.n_cells,
+                  derivation=args.derivation)
 
 
 if __name__ == '__main__':

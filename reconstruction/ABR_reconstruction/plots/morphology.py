@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Illustrative (schematic) figure per nucleus: population placement inside the
-model's insertion volume (elliptic disk or elliptic cylinder), plus a zoomed-in
-single-cell morphology showing the actual compartments (parsed from the .hoc
-files, not simulated -- pure geometry).
+Schematic figure per nucleus: population placement inside the model's insertion
+volume (elliptic disk or elliptic cylinder), plus a zoomed single-cell
+morphology showing the actual compartments, parsed from the .hoc files rather
+than simulated.
 
 Nuclei covered: MSO, AVCN-GBC, AVCN-SBC, MNTB (principal cell), LSO.
 
@@ -75,7 +75,6 @@ NAMED_CATEGORY_GROUPS = {
     'soma': 'soma',
     'dend_A': 'dendrite', 'dend_A1': 'dendrite', 'dend_A2': 'dendrite',
     'dend_B': 'dendrite', 'dend_B1': 'dendrite', 'dend_B2': 'dendrite',
-    'dend_C': 'dendrite',
     'dend_medial': 'dendrite', 'dend_lateral': 'dendrite',
     'axon': 'axon', 'ais': 'AIS',
     'precalyx_axon': 'precalyx axon', 'calyx': 'calyx terminal',
@@ -119,9 +118,9 @@ def _plot_morphology(ax, sections, category, plane=('x', 'z'), lw_scale=0.6, lw_
         all_u.append(u); all_v.append(v)
     ax.set_aspect('equal')
 
-    # Degenerate axis guard: a purely 1-D stick (e.g. MSO: everything varies
-    # along z only) leaves the other axis' range ~0, which combined with
-    # aspect='equal' collapses the whole subplot. Give it a sane fixed span.
+    # Degenerate axis guard: a purely 1-D stick (the MSO, where everything
+    # varies along z) leaves the other axis' range near 0, which with
+    # aspect='equal' collapses the subplot. Give it a fixed span instead.
     u_range = np.ptp(np.concatenate(all_u)) if all_u else 1.0
     v_range = np.ptp(np.concatenate(all_v)) if all_v else 1.0
     if v_range < 0.05 * max(u_range, 1.0):
@@ -140,7 +139,7 @@ def _plot_morphology(ax, sections, category, plane=('x', 'z'), lw_scale=0.6, lw_
 # Population insertion-volume helpers
 # ---------------------------------------------------------------------------
 def sample_flat_disk(n, radius_x, radius_y, z_half=0.0, seed=0):
-    """Flat elliptic disk (z = 0, or a thin +-z_half slab) -- AVCN / MNTB / MSO."""
+    """Flat elliptic disk (z = 0, or a thin z slab): AVCN, MNTB, MSO."""
     rng = np.random.default_rng(seed)
     x, y = np.empty(0), np.empty(0)
     while len(x) < n:
@@ -156,7 +155,7 @@ def sample_flat_disk(n, radius_x, radius_y, z_half=0.0, seed=0):
 
 
 def sample_elliptic_cylinder(n, radius_x, radius_z, half_height_y, seed=0):
-    """True elliptic cylinder, axis along y -- LSO convention."""
+    """True elliptic cylinder, axis along y, the LSO convention."""
     rng = np.random.default_rng(seed)
     x, z = np.empty(0), np.empty(0)
     while len(x) < n:
@@ -183,9 +182,9 @@ def _draw_disk_outline(ax, radius_x, radius_y, z=0.0, color='steelblue'):
 
 
 def _draw_flat_cylinder_outline(ax, radius_x, radius_y, height, color='steelblue'):
-    """Squat elliptic cylinder, axis along z (cross-section in x-y) -- MSO/AVCN/MNTB
-    convention, but drawn with a visible height instead of a z=0 flat disk. Purely
-    cosmetic (plotting only); has no bearing on the actual simulation geometry."""
+    """Squat elliptic cylinder, axis along z (cross-section in x-y), the
+    MSO/AVCN/MNTB convention drawn with a visible height instead of a flat disk.
+    Cosmetic only; it has no bearing on the simulation geometry."""
     theta = np.linspace(0, 2 * np.pi, 100)
     xe = radius_x * np.cos(theta)
     ye = radius_y * np.sin(theta)
@@ -216,10 +215,10 @@ def _draw_cylinder_outline(ax, radius_x, radius_z, half_height_y, color='steelbl
 
 
 def _draw_probe(ax, fixed_a, fixed_b, values, axis='z', color='black'):
-    """Linear multi-channel electrode shank, as actually configured in the
-    matching LFP_reconstruction/main_reconstruct*.py (PROBE_X/PROBE_Y/PROBE_Z).
-    `axis` selects which coordinate the channels are spread along; the other
-    two are held fixed at (fixed_a, fixed_b) in the remaining axis order."""
+    """Linear multi-channel electrode shank, as configured in the matching
+    LFP_reconstruction/main_reconstruct*.py (PROBE_X/PROBE_Y/PROBE_Z).
+    axis selects which coordinate the channels spread along; the other two are
+    held fixed at (fixed_a, fixed_b) in the remaining axis order."""
     fa = np.full_like(values, fixed_a)
     fb = np.full_like(values, fixed_b)
     if axis == 'z':
@@ -304,8 +303,7 @@ def build_figure(title, out_name, geometry, hoc_path, morph_plane, morph_title,
 
 
 def main():
-    # AVCN — GBC
-    # MSO — bipolar principal cell
+    # MSO bipolar principal cell
     build_figure(
         title='MSO principal neuron',
         out_name='mso_population_morphology.png',
@@ -332,7 +330,7 @@ def main():
         probe={'x': 0.0, 'y': 0.0, 'axis': 'z', 'half': P.AVCN_PROBE_HALF_SPAN, 'n_ch': P.N_CH},
     )
 
-    # AVCN — SBC
+    # AVCN SBC
     build_figure(
         title='AVCN: Spherical Bushy Cell (SBC)',
         out_name='sbc_population_morphology.png',
@@ -346,7 +344,7 @@ def main():
         probe={'x': 0.0, 'y': 0.0, 'axis': 'z', 'half': P.AVCN_PROBE_HALF_SPAN, 'n_ch': P.N_CH},
     )
 
-    # MNTB — principal cell
+    # MNTB principal cell
     build_figure(
         title='MNTB: principal neuron',
         out_name='mntb_population_morphology.png',
@@ -372,7 +370,7 @@ def main():
         pop_kind='cylinder',
         n_display=80,
         pop_view=(15, -50),
-        probe={'x': 0.0, 'z': 0.0, 'axis': 'y', 'half': P.LSO_HALF_HEIGHT_Y * 1.15, 'n_ch': P.N_CH},   # cosmetic: drawn along y (cylinder height axis), a bit longer than +-HALF_HEIGHT_Y
+        probe={'x': 0.0, 'z': 0.0, 'axis': 'y', 'half': P.LSO_HALF_HEIGHT_Y * 1.15, 'n_ch': P.N_CH},   # cosmetic: drawn along y, slightly longer than HALF_HEIGHT_Y
     )
 
 

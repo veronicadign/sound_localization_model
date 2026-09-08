@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
 """
-HybridLFPy LFP reconstruction for the AVCN *spherical* bushy cell (SBC) population.
+HybridLFPy LFP reconstruction for the AVCN spherical bushy cell (SBC) population.
 
-Parallel to main_reconstruct_avcn.py (the globular bushy cell / GBC pipeline),
-reusing the same AVCNPopulation subclass and plotting.  Only the SBC-specific
-deltas are defined here:
+Parallel to main_reconstruct_avcn.py (the globular bushy cell), reusing the
+same AVCNPopulation subclass and plotting. Only the SBC deltas are here:
 
-  morphology    real SBC EM reconstruction SBC_S113.hoc (NeuroMorpho Atoh7+,
-                converted by models/avcn/swc_to_hoc.py) vs GBC's VCN_c09
-  channels      cnmodel XM13_nacncoop Type II-I (less KLT/Na -> higher input
-                resistance) vs GBC's Type II
-  convergence   3 ANF endbulbs/SBC (params.py ANFs2SBCs) vs 20/GBC
-  endbulbs      few, large, axosomatic (85% soma / 15% proximal dendrite) vs
-                GBC's 70/20/5/5 modified endbulbs
-  population    28,000 SBC/side (params.py n_SBCs) vs 3,600 GBC
-  geometry      rostral spherical-cell area ~1.5-2.0 mm rostrocaudal ->
-                ELLIPSE_RADIUS_Y = 875 µm vs GBC's 600
+  morphology    SBC EM reconstruction SBC_S113.hoc (NeuroMorpho Atoh7+,
+                converted by models/avcn/swc_to_hoc.py), not GBC's VCN_c09
+  channels      cnmodel XM13_nacncoop Type II-I (less KLT and Na, so higher
+                input resistance), not GBC's Type II
+  convergence   3 ANF endbulbs per SBC (params.py ANFs2SBCs), not 20
+  endbulbs      few, large, axosomatic (85% soma, 15% proximal dendrite),
+                not GBC's 70/20/5/5 modified endbulbs
+  population    28,000 SBC per side (params.py n_SBCs), not 3,600
+  geometry      rostral spherical-cell area ~1.5-2.0 mm rostrocaudal, so
+                ELLIPSE_RADIUS_Y = 875 µm rather than 600
 
 Presynaptic drive, taus, coherent ventromedial axon orientation, probe and
 tonotopy are identical to the GBC pipeline.
@@ -25,7 +24,7 @@ CLI (single or MPI):
       --angle 0 --side L --n-cells 100
   mpiexec -n 4 python LFP_reconstruction/main_reconstruct_sbc.py ... --n-cells 3600
 
-Outputs -> RESULTS/lfp_tmp/output_sbc_{stem}_angle{A}_{S}/figures/:
+Outputs go to RESULTS/lfp_tmp/output_sbc_{stem}_angle{A}_{S}/figures/:
   sbc_lfp_reconstruction.png, sbc_lfp_phase_cycle.png, sbc_lfp_single_cells.png
 """
 
@@ -47,7 +46,7 @@ sys.path.insert(0, paths.AVCN_MODELS_DIR)
 import gbc_biophysics                                    # noqa: E402
 
 # The SBC reuses the whole GBC infrastructure; importing it also loads the AVCN
-# NEURON mechanisms.  Only the deltas below are SBC-specific.
+# NEURON mechanisms. Only the deltas below are SBC-specific.
 from LFP_reconstruction.main_reconstruct_avcn import (    # noqa: E402
     AVCNPopulation, DT, TSTOP, PROBE_X, PROBE_Y, PROBE_Z, SIGMA,
     ELLIPSE_RADIUS_X, AXON_TARGET, LAYER_BOUNDARIES,
@@ -194,7 +193,7 @@ def main():
     COMM.Barrier()
 
     if RANK == 0:
-        figures.plot_all(output_dir, PROBE_Z, PROBE_X, PROBE_Y, side, args.angle,
+        figures.plot_all(output_dir, (PROBE_X, PROBE_Y, PROBE_Z), side, args.angle,
                          args.n_cells, FIGURE_STYLE,
                          stimulus_freq=meta.get('stim_freq_hz'),
                          single_contribs=single_contribs, soma_pos=soma_pos,

@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""MNI152 <-> 4-sphere head-frame transform (Phase 1 of the atlas verification).
+"""MNI152 to 4-sphere head-frame transform (phase 1 of the atlas verification).
 
 Both frames share the same axis directions:
-    x = mediolateral   (left -, right +)
+    x = mediolateral    (left -, right +)
     y = anteroposterior (posterior -, anterior +)
     z = inferosuperior  (inferior -, superior +)
 so the map is a pure translation:  head = MNI - c,  MNI = head + c.
 
-Only the origin differs.  MNI152's origin is the anterior commissure; the head
-frame's origin is the centre of the concentric 4-sphere head model.  This module
-DERIVES c by fitting the innermost (brain, 79 mm) shell of the head model to the
-MNI152 brain mask, instead of the undocumented shift the pipeline uses today.
+Only the origin differs. MNI152's origin is the anterior commissure; the head
+frame's origin is the centre of the concentric 4-sphere model. This module
+derives c by fitting the innermost (brain, 79 mm) shell to the MNI152 brain
+mask, rather than using the undocumented shift the pipeline quoted:
 
-Legacy shift currently quoted in main_abr.py:92-104 / plots/positions.py:
     head_centre_MNI ~= [0, -18.3, +5.5] mm   ("Koessler et al. 2009 Cz anchor")
-No derivation for it exists in the repo, and it does not reproduce the live
-MSO_POS_UM either (see the report printed by __main__).
+
+which has no derivation in the repo and does not reproduce the live MSO_POS_UM
+either (see the report printed by __main__).
 
 Run standalone for the report:
     python ABR_reconstruction/atlas/mni_head_transform.py
@@ -30,13 +30,13 @@ PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))))
 sys.path.insert(0, PACKAGE_ROOT)
 
-# reconstruction/ is two (or three) levels up; adding it lets the atlas
-# scripts share the pipeline's own notion of where the repository is.
+# reconstruction/ is a couple of levels up; put it on sys.path so the atlas
+# scripts share the pipeline's own repository root.
 from recon_core.paths import REPO_ROOT                            # noqa: E402
 
-# Head-model geometry.  Imported from the pipeline when available so the fit can
-# never drift from the model it is fitting; the literals are the fallback for a
-# bare environment (they are asserted equal in the self-test below).
+# Head-model geometry. Imported from the pipeline when available so the fit
+# cannot drift from the model it is fitting; the literals are the fallback for
+# a bare environment and are asserted equal in the self-test below.
 _FALLBACK_RADII_MM = [79., 80., 85., 90.]
 
 
@@ -81,11 +81,12 @@ def _brain_mask_surface_points_mni():
 
 
 def fit_head_centre(radius_mm=None, constrain_midsagittal=True):
-    """Least-squares centre c such that the MNI brain surface best matches |p - c| = R.
+    """Least-squares centre c placing the MNI brain surface on |p - c| = R.
 
-    Minimises sum_i (|p_i - c| - R)^2 over c with R FIXED at the head model's
-    brain-shell radius (we are placing the model's sphere, not fitting a free
-    sphere to the brain).  c_x is pinned to 0 by mid-sagittal symmetry.
+    Minimises sum_i (|p_i - c| - R)^2 over c with R fixed at the head model's
+    brain-shell radius, since this places the model's sphere rather than
+    fitting a free sphere to the brain. c_x is pinned to 0 by mid-sagittal
+    symmetry.
 
     Returns
     -------
@@ -137,7 +138,7 @@ _CENTRE_CACHE = {}
 def head_centre_mni_mm(source='fitted'):
     """Origin of the head frame expressed in MNI mm.
 
-    source='fitted' -> derived here (cached); source='legacy' -> [0,-18.3,+5.5].
+    source='fitted' is derived here and cached; 'legacy' is [0,-18.3,+5.5].
     """
     if source == 'legacy':
         return LEGACY_HEAD_CENTRE_MNI_MM.copy()
@@ -149,25 +150,25 @@ def head_centre_mni_mm(source='fitted'):
 
 
 def mni_to_head(p_mni_mm, source='fitted'):
-    """MNI mm -> head-centred mm.  Accepts (3,) or (N,3)."""
+    """MNI mm to head-centred mm. Accepts (3,) or (N,3)."""
     return np.asarray(p_mni_mm, dtype=float) - head_centre_mni_mm(source)
 
 
 def head_to_mni(p_head_mm, source='fitted'):
-    """Head-centred mm -> MNI mm.  Accepts (3,) or (N,3)."""
+    """Head-centred mm to MNI mm. Accepts (3,) or (N,3)."""
     return np.asarray(p_head_mm, dtype=float) + head_centre_mni_mm(source)
 
 
 def head_um_to_mni(p_head_um, source='fitted'):
-    """Head-centred um -> MNI mm."""
+    """Head-centred um to MNI mm."""
     return head_to_mni(np.asarray(p_head_um, dtype=float) * 1e-3, source)
 
 
 # ---------------------------------------------------------------------------
 # Report / self-test
 # ---------------------------------------------------------------------------
-# Live pipeline constants, duplicated here ONLY so this module can report on
-# them without importing NEURON/MPI.  Kept in sync by _assert_matches_pipeline().
+# Live pipeline constants, duplicated here only so this module can report on
+# them without importing NEURON or MPI. Kept in sync by _assert_matches_pipeline().
 _LIVE_POS_UM = {
     'MSO':      {'R': [5_000., -18_700., -29_520.]},
     'LSO':      {'R': [9_000., -20_500., -30_000.]},

@@ -2,16 +2,16 @@
 """
 Reading an ABR sweep across artificial ITDs.
 
-`--figure summary`  onset-peak latency and amplitude versus ITD, plus the CSV of
-                    the numbers behind them
-`--figure overlay`  the waveforms themselves, one colour per ITD, at Cz, M1 and
-                    in the Cz−M1 derivation
-`--figure compare`  latency versus ITD with and without MSO inhibition, read from
-                    two summary CSVs — the test of whether the ITD dependence
-                    survives when the inhibition is removed
+--figure summary  onset-peak latency and amplitude versus ITD, plus the CSV of
+                  the numbers behind them
+--figure overlay  the waveforms themselves, one colour per ITD, at Cz, M1 and
+                  in the Cz-M1 derivation
+--figure compare  latency versus ITD with and without MSO inhibition, read from
+                  two summary CSVs, so it tests whether the ITD dependence
+                  survives when the inhibition is removed
 
-All three locate their inputs by rebuilding the directory `main_abr.py` wrote:
-one multi-ITD `.pic`, so the stem is fixed and only the ITD label varies.
+All three locate their inputs by rebuilding the directory main_abr.py wrote:
+one multi-ITD .pic, so the stem is fixed and only the ITD label varies.
 
 Usage:
   python ABR_reconstruction/plots/itd_sweep.py --figure summary \\
@@ -44,7 +44,7 @@ PALETTE = ['#000000', '#4C82B5', '#D1615D', '#3E9B72', '#B07AA1',
 
 
 def itd_dir(stem, itd_us, side, tag=''):
-    """The ABR output directory `main_abr.py --itd-us` wrote."""
+    """The ABR output directory main_abr.py --itd-us wrote."""
     return common.abr_dir(stem, common.condition_label(itd_us, 'itd'), side,
                           suffix=tag)
 
@@ -59,7 +59,7 @@ def _despine(ax, panel_letter=None):
 
 
 def collect_peaks(stem, itds, side, tag, derivation, window):
-    """Onset peak per ITD -> `(itds, latencies_ms, amplitudes_µV)`."""
+    """Onset peak per ITD, as (itds, latencies_ms, amplitudes_µV)."""
     used, latencies, amplitudes = [], [], []
     print(f'{"ITD(us)":>8} {"latency(ms)":>12} {"amplitude(uV)":>15}')
     for itd in sorted(itds):
@@ -82,7 +82,7 @@ def plot_summary(out_dir, stem, itds, side, tag, derivation, window, stim_label,
     itds, latencies, amplitudes = collect_peaks(stem, itds, side, tag,
                                                 derivation, window)
     if not len(itds):
-        sys.exit('no ABR.h5 found for any ITD — did the sweep finish?')
+        sys.exit('no ABR.h5 found for any ITD, did the sweep finish?')
 
     os.makedirs(out_dir, exist_ok=True)
     title = (f'{stim_label}   |   {derivation}, onset peak '
@@ -110,7 +110,7 @@ def plot_summary(out_dir, stem, itds, side, tag, derivation, window, stim_label,
 
 
 def plot_overlay(out_png, stem, itds, side, tag, stim_label, n_cells):
-    """One curve per ITD at Cz and M1, and in the Cz−M1 derivation."""
+    """One curve per ITD at Cz and M1, and in the Cz-M1 derivation."""
     fig = plt.figure(figsize=(13, 8), constrained_layout=True)
     grid = gridspec.GridSpec(2, 2, figure=fig, height_ratios=[1, 1])
     ax_cz = fig.add_subplot(grid[0, 0])
@@ -155,8 +155,8 @@ def plot_overlay(out_png, stem, itds, side, tag, stim_label, n_cells):
 def plot_inhibition_compare(out_dir, sides, n_cells):
     """Latency vs ITD with and without MSO inhibition, from the summary CSVs.
 
-    Reads what `--figure summary` wrote for the intact and the `_noinh` sweeps,
-    so the two curves are guaranteed to be the same measurement.
+    Reads what --figure summary wrote for the intact and the _noinh sweeps, so
+    the two curves are the same measurement.
     """
     os.makedirs(out_dir, exist_ok=True)
     for side in sides:

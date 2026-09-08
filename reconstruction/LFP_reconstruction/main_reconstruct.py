@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-HybridLFPy LFP reconstruction for MSO population.
+HybridLFPy LFP reconstruction for the MSO population.
 
 CLI usage (single or multi-process):
   python LFP_reconstruction/main_reconstruct.py [options]
@@ -13,10 +13,10 @@ Options:
   --n-cells N       MSO cells to simulate (default: 100)
   --n-single N      Single-cell contribution plots to save (default: 5)
 
-Outputs saved to RESULTS/lfp_tmp/output_angle{ANGLE}_{SIDE}/figures/:
-  mso_lfp_reconstruction.png   — compound LFP (stacked traces + colourmap)
-  mso_lfp_single_cells.png     — per-cell LFP colourmap + best-channel trace
-                                  annotated with min distance soma→probe
+Outputs go to RESULTS/lfp_tmp/output_angle{ANGLE}_{SIDE}/figures/:
+  mso_lfp_reconstruction.png   compound LFP (stacked traces and colourmap)
+  mso_lfp_single_cells.png     per-cell LFP colourmap and best-channel trace,
+                               annotated with the min soma to probe distance
 """
 
 import os
@@ -32,9 +32,11 @@ from recon_core import params as P
 from recon_core import paths
 from recon_core.population import ReconstructionPopulation
 from LFP_reconstruction import figures
-from recon_core.mpi_utils import COMM, RANK, broadcast_from_root, load_mechanisms
+from recon_core.mpi_utils import (COMM, RANK, broadcast_from_root,
+                                  load_mechanisms, set_temperature)
 
 load_mechanisms(paths.MSO_MODELS_DIR)
+set_temperature(P.BODY_TEMPERATURE_C)
 
 HOC_FILE = os.path.join(paths.MSO_MODELS_DIR, 'mso_model.hoc')
 
@@ -55,7 +57,7 @@ SIGMA = P.SIGMA_EXTRACELLULAR
 
 
 def mso_freq_to_idx(freq_hz):
-    """Characteristic frequency (Hz) -> MSO tonotopic index."""
+    """MSO tonotopic index of a characteristic frequency (Hz)."""
     return P.tonotopic_index(freq_hz, N_MSO_TOTAL)
 
 
@@ -68,15 +70,16 @@ FIGURE_STYLE = figures.FigureStyle(name='MSO', file_prefix='mso')
 class MSOPopulation(ReconstructionPopulation):
     """MSO: bipolar dendrites, each driven by one ear.
 
-    The tonotopic range can be narrowed to a frequency band (`--mso-freq-min/max`),
-    which restricts both the presynaptic window and the x-slice the somas occupy —
-    so the probe at x = 0 keeps the same relative position within the modelled band.
+    The tonotopic range can be narrowed to a frequency band
+    (--mso-freq-min/max), which restricts both the presynaptic window and the
+    x-slice the somas occupy, so the probe at x = 0 keeps the same relative
+    position within the modelled band.
     """
 
     PER_POP_SYN = P.MSO_SYNAPSES
     N_POST_TOTAL = N_MSO_TOTAL
-    # The MSO's inhibitory inputs use hybridLFPy's layer indices unchanged, so its
-    # empty layers must still reach insert_synapses.
+    # The MSO's inhibitory inputs use hybridLFPy's layer indices unchanged, so
+    # its empty layers must still reach insert_synapses.
     SKIP_EMPTY_LAYERS = False
 
     def __init__(self, n_syn_per_pop=None, mso_idx_lo=0, mso_idx_hi=None, **kwargs):
@@ -95,10 +98,10 @@ class MSOPopulation(ReconstructionPopulation):
     def select_synapse_idx(self, cell, pop_type, idx, layer):
         """Excitation is spread over the dendrite with a distal bias.
 
-        Each SBC synapse is placed on a segment of this layer\'s depth band with a
+        Each SBC synapse lands on a segment of this layer's depth band with a
         probability proportional to its distance from the soma, reproducing the
-        distal-dominant endbulb distribution.  Inhibition keeps the default somatic
-        placement.
+        distal-dominant endbulb distribution. Inhibition keeps the default
+        somatic placement.
         """
         if pop_type != 'SBC' or len(idx) == 0:
             return idx
@@ -121,8 +124,8 @@ class MSOPopulation(ReconstructionPopulation):
                       z_min=0.0, z_max=0.0, min_cell_interdist=1.0, **kwargs):
         """Fill the tonotopic x-slice of the ellipse, sorted along x.
 
-        Sampled column-wise rather than by rejection: x is drawn inside the slice
-        and y within that column\'s chord, so a narrow band stays exactly filled.
+        Sampled column-wise rather than by rejection: x is drawn inside the
+        slice and y within that column's chord, so a narrow band stays filled.
         """
         n_cells = self.POPULATION_SIZE
         x_lo = -radius_x + self.mso_idx_lo / (N_MSO_TOTAL - 1) * 2.0 * radius_x
@@ -192,29 +195,29 @@ def main():
     mso_idx_hi = mso_freq_to_idx(args.mso_freq_max)
     if RANK == 0:
         print(f'[MSO band] {args.mso_freq_min:.0f}–{args.mso_freq_max:.0f} Hz '
-              f'→ idx [{mso_idx_lo}, {mso_idx_hi}] / {N_MSO_TOTAL}')
+              f'-> idx [{mso_idx_lo}, {mso_idx_hi}] / {N_MSO_TOTAL}')
 
     side        = args.side
     contra_side = 'R' if side == 'L' else 'L'
 
-    # Stimulus-condition key: --ild-db > --itd-us > --angle (default 0). The pic key
-    # is the raw value (seconds for ITD, dB for ILD, int for angle); the readable
-    # label goes into the output dir. Same convention as main_abr.py::_condition.
+    # Stimulus condition key: --ild-db, then --itd-us, then --angle (default 0).
+    # The pic key is the raw value (seconds for ITD, dB for ILD, int for angle);
+    # the readable label goes into the output dir, as in main_abr.py::_condition.
     cond_val, cond_label = paths.condition_key(args.angle, args.itd_us, args.ild_db)
 
     # Spike extraction on rank 0 only; broadcast metadata to all ranks
     meta = broadcast_from_root(
         lambda: _extract_spikes(cond_val, side, pic_file=args.pic_file))
 
-    # MSO anatomy: medial dendrite ← contra SBC, lateral dendrite ← ipsi SBC
-    # (Cant & Hyson 1992; Joris et al. 1998). MNTBC = contra-ear-driven inhibition,
-    # LNTBC = ipsi-ear-driven inhibition. Ear-specific conditions silence the inputs
-    # driven by the absent ear (same partition as main_abr.py::_side_condition).
+    # MSO anatomy: medial dendrite from contra SBC, lateral dendrite from ipsi
+    # SBC (Cant & Hyson 1992; Joris et al. 1998). MNTBC is contra-ear-driven
+    # inhibition, LNTBC ipsi-ear-driven. Ear-specific conditions silence the
+    # inputs of the absent ear (as in main_abr.py::_side_condition).
     X_pops = [f'SBC_{contra_side}', f'SBC_{side}',
               f'MNTBC_{side}', f'LNTBC_{side}']
     k_yxl_local = [row[:] for row in P.MSO_CONVERGENCE]
-    # Silence the inputs the absent ear would have driven, by zeroing that
-    # population's COLUMN — so the surviving counts stay tied to MSO_CONVERGENCE.
+    # Silence the inputs the absent ear would have driven by zeroing that
+    # population's column, so the surviving counts stay tied to MSO_CONVERGENCE.
     #   ipsilateral   ear: contra SBC (col 0) and MNTBC (col 2, contra-driven) off
     #   contralateral ear: ipsi SBC   (col 1) and LNTBC (col 3, ipsi-driven)   off
     _SILENCED = {'ipsilateral': (0, 2), 'contralateral': (1, 3)}
@@ -292,7 +295,7 @@ def main():
 
     # Grab single-cell outputs before collect_data() clears pop.output
     
-    # Ensure we don't try to sample more cells than exist on this specific MPI rank
+    # Never sample more cells than exist on this MPI rank
     n_available = len(pop.RANK_CELLINDICES)
     n_grab = min(args.n_single, n_available)
     
@@ -321,7 +324,7 @@ def main():
     COMM.Barrier()
 
     if RANK == 0:
-        figures.plot_all(output_dir, PROBE_Z, PROBE_X, PROBE_Y, side, args.angle,
+        figures.plot_all(output_dir, (PROBE_X, PROBE_Y, PROBE_Z), side, args.angle,
                          args.n_cells, FIGURE_STYLE,
                          stimulus_freq=meta.get('stim_freq_hz'),
                          single_contribs=single_contribs, soma_pos=soma_pos,
@@ -329,7 +332,7 @@ def main():
 
 
 # ---------------------------------------------------------------------------
-# Helper: extract spikes (runs extract_spikes.py automatically if needed)
+# Spike extraction (runs extract_spikes.py if the cache is missing)
 # ---------------------------------------------------------------------------
 _pic_stem = paths.pic_stem
 
@@ -345,10 +348,10 @@ def _extract_spikes(angle, side, pic_file=None):
     if os.path.exists(meta_path):
         with open(meta_path) as f:
             meta = json.load(f)
-        # Accept cache only if it matches the current extract format: contralateral
-        # SBC + GBC, ipsilateral ANF AND ipsilateral LSO output. Contralateral GBC
-        # is the MNTB calyx drive; LSO_{side} is the spiking-LSO ABR drive —
-        # requiring them forces re-extraction of stale pre-GBC/pre-LSO caches.
+        # Accept the cache only if it matches the current extract format: contra
+        # SBC + GBC, ipsi ANF and ipsi LSO output. Contra GBC is the MNTB calyx
+        # drive and LSO_{side} the spiking-LSO ABR drive, so requiring them
+        # forces re-extraction of stale caches.
         if (f'SBC_{contra_side}' in meta and f'GBC_{contra_side}' in meta
                 and f'ANF_{side}' in meta and f'LSO_{side}' in meta):
             return meta
@@ -357,14 +360,5 @@ def _extract_spikes(angle, side, pic_file=None):
     return _es.extract_and_save(pic_file, angle, side, spikes_dir)
 
 
-# ---------------------------------------------------------------------------
-# Plotting: compound LFP
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# Plotting: phase-cycle figure (C1 / D1)
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# Plotting: single-cell contributions
-# ---------------------------------------------------------------------------
 if __name__ == '__main__':
     main()

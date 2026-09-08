@@ -1,27 +1,32 @@
 #!/usr/bin/env python3
 """
-Phase 3 single-cell validation: the calyx of Held prespike + cleft potential.
+Single-cell validation of the calyx of Held prespike and cleft potential.
 
-Loads models/mntb/calyx_model.hoc, inserts NEURON's `extracellular` mechanism on
+Loads models/mntb/calyx_model.hoc, inserts NEURON's extracellular mechanism on
 the terminal to represent the sub-calyceal cleft leak conductance
   g_cl ~ 1.0 uS  (R_cleft ~ 1 MOhm; Sierksma & Borst 2021 [7]),
 drives the pre-calyx axon to fire one presynaptic AP, and checks:
   1. the terminal fires an AP (the prespike source),
-  2. the cleft potential V_cleft (= extracellular vext under the terminal) reaches
-     several mV during the AP, as reported for the juvenile calyx of Held [7],
-  3. a current-dipole moment p(t) = sum(r * i_membrane) is produced (the prespike).
+  2. the cleft potential V_cleft (extracellular vext under the terminal)
+     reaches several mV during the AP, as reported for the juvenile calyx [7],
+  3. a current-dipole moment p(t) = sum(r * i_membrane) is produced.
 
 Usage:
   python models/mntb/validate_calyx.py
 
-Saves models/mntb/figures/calyx_prespike_validation.png (+ stdout PASS/FAIL).
+Saves models/mntb/figures/calyx_prespike_validation.png and a PASS/FAIL line.
 """
 import os
+import sys
 import argparse
 
 import numpy as np
 import neuron
 from neuron import h
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__)))))
+from recon_core import params as _P                      # noqa: E402
 
 HERE       = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.dirname(HERE)          # reconstruction/models
@@ -56,7 +61,7 @@ def main():
     h.load_file('stdrun.hoc')
     h.load_file(args.morphology)
     h.cvode.use_fast_imem(1)
-    h.celsius = 34.0
+    h.celsius = _P.BODY_TEMPERATURE_C   # the pipeline temperature
 
     calyx = h.calyx
     pre   = h.precalyx_axon

@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """
-Views of the complete brainstem ABR written by `main_abr_full.py`.
+Views of the complete brainstem ABR written by main_abr_full.py.
 
-`--layout electrodes`   per-nucleus decomposition + composite, one panel per
-                        scalp electrode (Cz, M1, M2)
-`--layout derivations`  composite only, Cz−M1 above Cz−M2
+--layout electrodes   per-nucleus decomposition and composite, one panel per
+                      scalp electrode (Cz, M1, M2)
+--layout derivations  composite only, Cz-M1 above Cz-M2
 
-Both read the band-passed `ABR_full.h5`; nothing is recomputed.
+Both read the band-passed ABR_full.h5; nothing is recomputed.
 
 Usage:
-  python ABR_reconstruction/plots/full_abr.py --dir RESULTS/abr_tmp/output_full_...
+  python ABR_reconstruction/plots/full_abr.py --dir RESULTS/full_abr/<stem>_...
   python ABR_reconstruction/plots/full_abr.py --layout derivations
 """
 
 import argparse
+import glob
 import os
 import sys
 
@@ -28,8 +29,11 @@ from recon_core import io_utils, paths
 from recon_core.signal_utils import derive, time_axis
 from ABR_reconstruction.plots import common
 
-DEFAULT_DIR = os.path.join(paths.ABR_TMP_DIR,
-                           'output_full_click_70dBbaseline_angle0_both_lsosynaptic')
+def _newest_run():
+    """Most recently written RESULTS/full_abr/<run>, or None if there is none."""
+    runs = [d for d in glob.glob(os.path.join(paths.FULL_ABR_DIR, '*'))
+            if os.path.exists(os.path.join(d, 'ABR_full.h5'))]
+    return max(runs, key=os.path.getmtime) if runs else None
 
 
 def plot_per_electrode(traces, names, srate, side, out_png):
@@ -77,23 +81,28 @@ def plot_derivations(traces, names, srate, side, out_png):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--dir', default=DEFAULT_DIR,
-                    help='output_full_* directory holding ABR_full.h5')
+    ap.add_argument('--dir', default=None,
+                    help='RESULTS/full_abr/<run> directory holding ABR_full.h5 '
+                         '(default: the most recently written one)')
     ap.add_argument('--layout', choices=['electrodes', 'derivations'],
                     default='electrodes')
     ap.add_argument('--out', default=None)
     args = ap.parse_args()
 
-    path = os.path.join(args.dir, 'ABR_full.h5')
+    run_dir = args.dir or _newest_run()
+    if run_dir is None:
+        sys.exit(f'error: no composite found under {paths.FULL_ABR_DIR}, '
+                 'run `python reconstruction/main.py abr full ...` first')
+    path = os.path.join(run_dir, 'ABR_full.h5')
     if not os.path.exists(path):
-        sys.exit(f'error: {path} not found — run main_abr_full.py first')
+        sys.exit(f'error: {path} not found, run main_abr_full.py first')
 
     traces, names, srate = io_utils.read_named_traces(path)
     import h5py
     with h5py.File(path, 'r') as f:
         side = f.attrs.get('side', '?')
 
-    out = args.out or os.path.join(args.dir, 'figures',
+    out = args.out or os.path.join(run_dir, 'figures',
                                    f'full_abr_{args.layout}.png')
     if args.layout == 'electrodes':
         plot_per_electrode(traces, names, srate, side, out)

@@ -1,3 +1,7 @@
+// Left LSO cell: the mirror of the right one (model x negated), which keeps
+// the axon on head +z while tonotopy and the dendritic tilt stay
+// mirror-symmetric. Only the axon has a non-zero x, so mirroring touches
+// nothing else.
 // LSO multicompartment morphology, active conductances, human dimensions.
 //
 // Morphology (human):
@@ -130,8 +134,8 @@ axon {
     insert ih
     gbar_ih = 0.0005
     ek = -77.0
-    pt3dadd(  9.546,   9.546, 0, 1.5)
-    pt3dadd(115.612, 115.612, 0, 1.5)
+    pt3dadd( -9.546,   9.546, 0, 1.5)
+    pt3dadd(-115.612, 115.612, 0, 1.5)
 }
 
 connect dend_A(0), soma(1)

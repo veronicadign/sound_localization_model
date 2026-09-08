@@ -1,4 +1,4 @@
-// MSO multicompartment morphology — active conductances (Klt + Ih)
+// MSO multicompartment morphology, active conductances (Klt and Ih)
 // Same morphology as mso_model.hoc; adds Kv1 and HCN channels.
 // Channel kinetics: Rothman & Manis 2003, J Neurophysiol 89:3070-3087.
 //

@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
 """Download the ANCHOR human brainstem atlas annotations (route B).
 
-ANCHOR - Atlas of Neurochemical Characterization of the Human brainstem with 3D
-Reconstruction.  Sudha Gopalakrishnan Brain Centre, IIT Madras (2026).
+ANCHOR is the Atlas of Neurochemical Characterization of the Human brainstem
+with 3D Reconstruction. Sudha Gopalakrishnan Brain Centre, IIT Madras (2026).
 Viewer: https://anchor.humanbrain.in/   doi:10.64898/2026.06.03.727794
 
-Specimens (viewer 'data=' index -> internal brain id):
-    data=0 -> bid 342   Specimen 1, 25 gestational weeks (fetal, whole brain)
-    data=1 -> bid 421   Specimen 2, 9 years  (brainstem)
-    data=2 -> bid 296   Specimen 3, 54 years (brainstem)   <- ADULT, the one used
-    data=3 -> bid 539   Specimen 2 midbrain, 9 years
+Specimens (viewer 'data=' index to internal brain id):
+    data=0  bid 342   Specimen 1, 25 gestational weeks (fetal, whole brain)
+    data=1  bid 421   Specimen 2, 9 years  (brainstem)
+    data=2  bid 296   Specimen 3, 54 years (brainstem), the adult one used here
+    data=3  bid 539   Specimen 2 midbrain, 9 years
 
 Per specimen the site serves
-    section_data/data_<bid>_v<n>.json     per-section metadata, incl. a real
+    section_data/data_<bid>_v<n>.json     per-section metadata, including a real
                                           rostrocaudal coordinate 'mm'
     annotations/<bid>/<STAIN>/<bid>_<secID>.geojson
                                           polygon annotations, each feature
-                                          carrying the structure name/acronym/id
-                                          from annotation_tree/brainstemnomenclature-v1.json
+                                          carrying the structure name, acronym
+                                          and id from
+                                          annotation_tree/brainstemnomenclature-v1.json
 
 Cached (gitignored) in data/atlases/anchor/.
 
@@ -35,14 +36,14 @@ PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))))
 sys.path.insert(0, PACKAGE_ROOT)
 
-# reconstruction/ is two (or three) levels up; adding it lets the atlas
-# scripts share the pipeline's own notion of where the repository is.
+# reconstruction/ is a couple of levels up; put it on sys.path so the atlas
+# scripts share the pipeline's own repository root.
 from recon_core.paths import REPO_ROOT                            # noqa: E402
 CACHE_DIR = os.path.join(REPO_ROOT, 'data', 'atlases', 'anchor')
 
 BASE = 'https://anchor.humanbrain.in/'
 
-# viewer index -> (brain id, section-data file, description)
+# viewer index to (brain id, section-data file, description)
 SPECIMENS = {
     0: ('342', 'section_data/data_342_v1.json', 'Specimen 1, 25 GW fetal, whole brain'),
     1: ('421', 'section_data/data_421_v1.json', 'Specimen 2, 9 years, brainstem'),
@@ -89,7 +90,7 @@ def annotation(rel_path):
 
 
 def fetch_all_annotations(specimen=ADULT, verbose=True):
-    """Download every annotated section of a specimen.  Returns [(rec, geojson)]."""
+    """Download every annotated section of a specimen, as [(rec, geojson)]."""
     recs = [r for r in sections(specimen) if r.get('annotation')]
     out, missing = [], 0
     for i, r in enumerate(recs, 1):
