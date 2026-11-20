@@ -24,6 +24,8 @@ import os
 import subprocess
 import sys
 
+os.environ['RECON_SYN_WEIGHTS'] = 'scaled'   # before any recon_core import
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from recon_core.utils import paths

@@ -26,6 +26,8 @@ Outputs under the chain record set:
 import os
 import sys
 
+os.environ['RECON_SYN_WEIGHTS'] = 'scaled'   # before any recon_core import
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
@@ -300,7 +302,7 @@ def _build_mntb(side, n_cells, spikes_dir, meta, output_dir, spec):
                     'v_init': C.MNTB_V_INIT, 'dt': DT, 'tstart': 0.,
                     'tstop': TSTOP, 'nsegs_method': None},
         probes=[calyx(None)],
-        POPULATIONSEED=47,          # as main_abr_mntb.py's 'calyx' entry
+        POPULATIONSEED=46,          # = principal cells: calyx i on principal cell i
         networkSim=_net(),
         synDelayLoc=C.CALYX_DELAYS,  # chain params: zero, driven at heminode
         J_yX=[calyx_syn['weight']],

@@ -186,8 +186,18 @@ def _run_one_side(side, args, meta):
 # ---------------------------------------------------------------------------
 # Head model projection + saving (rank 0 only)
 # ---------------------------------------------------------------------------
+# Settling transient (cells start off equilibrium): blanked up to the earliest
+# arrival of an active input, SBC (ANFs2SBCs + SBC->MSO) or MNTBC
+# (ANFs2GBCs + GBCs2MNTBCs + MNTB->MSO). LNTBC has weight 0.
+_D = P.BRAINSTEM.SYN_DELAYS
+SETTLE_MS = min(_D.ANFs2SBCs + min(P.MSO_DELAYS[0], P.MSO_DELAYS[1]),
+                _D.ANFs2GBCs + _D.GBCs2MNTBCs + P.MSO_DELAYS[2])
+
+
 def _project_and_save(side, p_model, output_dir):
-    """Rotate the dipole into the head frame and store it, as (p_head, srate)."""
+    """Blank the settling transient, rotate into the head frame, store p_head."""
+    p_model = np.asarray(p_model, dtype=float).copy()
+    p_model[:, :int(round(SETTLE_MS / DT))] = 0.0
     p_head = head_model.rotate_to_head(p_model, ROTATION[side])
     io_utils.write_population_dipole(output_dir, p_head, SRATE)
     return p_head, SRATE

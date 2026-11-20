@@ -50,7 +50,7 @@ MONAURAL_SIDES = {'right_ear': ('R', 'L'), 'left_ear': ('L', 'R')}
 
 
 #: Generators each nucleus writes (ANF: see P.ANF_WAVE1_GROUPS and
-#: P.ANF_STATIONARY_GROUPS). Records of any other generator are skipped.
+#: P.ANF_JUNCTION_GROUPS). Records of any other generator are skipped.
 KNOWN_GENERATORS = {
     'AVCN': P.GBC_GROUPED_GROUPS + ('SBC',),
     'MNTB': ('principal', 'calyx'),
@@ -58,11 +58,16 @@ KNOWN_GENERATORS = {
     'LSO': ('synaptic',),
 }
 
+#: Every ANF junction record name, over all modes.
+_ANF_JUNCTIONS = {g for gs in P.ANF_JUNCTION_GROUPS.values() for g in gs}
+
 
 def anf_wave1_group(anf_source, wave1_source):
     """Record name of the wave I generator main_abr_anf.py writes in this mode."""
     if anf_source == 'full':
         return P.ANF_DISTRIBUTED_GROUP
+    if anf_source == 'product':
+        return P.ANF_DISTAL_BINS_GROUP
     return P.ANF_MODIOLUS_GROUP if wave1_source == 'modiolus' else P.ANF_DISTAL_GROUP
 
 
@@ -104,7 +109,7 @@ def _discover(stem, cond_label, want_nuclei, want_sides, want_condition,
         if nucleus != 'ANF' and generator not in KNOWN_GENERATORS.get(nucleus, ()):
             print(f'  [discover] skipping {name}: unknown generator {nucleus}:{generator}')
             continue
-        if attrs.get('syn_weights') != io_utils.SYN_WEIGHTS_TAG:
+        if nucleus != 'ANF' and attrs.get('syn_weights') != io_utils.syn_weights_for(variant):
             print(f'  [discover] skipping {name}: written with other synaptic weights; re-run it')
             continue
         if attrs.get('n_cells') != attrs.get('n_total'):
@@ -122,8 +127,12 @@ def _discover(stem, cond_label, want_nuclei, want_sides, want_condition,
             if nucleus == 'MNTB' and side != mono[1]:
                 continue
         if nucleus == 'ANF':
+            # Junction records belong to their mode (P.ANF_JUNCTION_GROUPS).
+            if (generator in _ANF_JUNCTIONS
+                    and generator not in P.ANF_JUNCTION_GROUPS[anf_source]):
+                continue
             anf_any_on_disk = True
-            if generator not in P.ANF_STATIONARY_GROUPS:
+            if generator not in _ANF_JUNCTIONS:
                 anf_wave1_on_disk.setdefault(
                     generator, P.ANF_WAVE1_GROUPS.get(generator))
         if nucleus == 'AVCN':
@@ -132,21 +141,21 @@ def _discover(stem, cond_label, want_nuclei, want_sides, want_condition,
             gbc_seen = True
         # Wave I representations are alternatives: keep only the one selected by
         # anf_source. Every ANF generator must be declared in P.ANF_WAVE1_GROUPS
-        # or P.ANF_STATIONARY_GROUPS.
-        if nucleus == 'ANF' and generator not in P.ANF_STATIONARY_GROUPS:
-            mode = P.ANF_WAVE1_GROUPS.get(generator)
-            if mode is None:
+        # or P.ANF_JUNCTION_GROUPS.
+        if nucleus == 'ANF' and generator not in _ANF_JUNCTIONS:
+            modes = P.ANF_WAVE1_GROUPS.get(generator)
+            if modes is None:
                 raise ValueError(
                     f'{os.path.basename(path)}: unknown ANF generator '
                     f'{generator!r}. Every ANF generator is either a '
-                    f'stationary junction (P.ANF_STATIONARY_GROUPS = '
-                    f'{list(P.ANF_STATIONARY_GROUPS)}) or a wave I '
+                    f'junction (P.ANF_JUNCTION_GROUPS = '
+                    f'{P.ANF_JUNCTION_GROUPS}) or a wave I '
                     f'representation, which must be declared in '
                     f'P.ANF_WAVE1_GROUPS = {P.ANF_WAVE1_GROUPS} together with '
                     f'the --anf-source mode that selects it. Refusing to '
                     f'guess: an undeclared generator would be summed on top '
                     f'of the selected wave I source.')
-            if mode != anf_source:
+            if anf_source not in modes:
                 continue
             anf_wave1_seen.add(generator)
         srates.add(attrs['srate'])
@@ -264,7 +273,7 @@ def main():
                     help='acoustic condition: picks condition-specific MSO/LSO '
                          'records, falling back to binaural for AVCN/MNTB')
     ap.add_argument('--anf-source', type=str, default='boundary',
-                    choices=['full', 'boundary'], dest='anf_source',
+                    choices=['full', 'boundary', 'product'], dest='anf_source',
                     help='ANF representation to assemble; must match the one '
                          'main_abr_anf.py wrote (default boundary)')
     ap.add_argument('--variant', default=None,

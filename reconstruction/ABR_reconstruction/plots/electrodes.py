@@ -41,7 +41,7 @@ def generators(anf_source='boundary', wave1_source='modiolus'):
     return [
         ('anf', 'ANF (auditory nerve)',
          [('ANF', anf_wave1_group(anf_source, wave1_source)),
-          *[('ANF', g) for g in P.ANF_STATIONARY_GROUPS]]),
+          *[('ANF', g) for g in P.ANF_JUNCTION_GROUPS[anf_source]]]),
         ('gbc', 'AVCN GBC', [('AVCN', 'GBCsoma'), ('AVCN', 'GBCaxon')]),
         ('sbc', 'AVCN SBC', [('AVCN', 'SBC')]),
         ('mntb', 'MNTB', [('MNTB', 'principal'), ('MNTB', 'calyx')]),
@@ -124,7 +124,7 @@ def main():
     ap.add_argument('--side', default='both', choices=['L', 'R', 'both'])
     ap.add_argument('--variant', default=None, choices=['chain'])
     ap.add_argument('--anf-source', dest='anf_source', default='boundary',
-                    choices=['full', 'boundary'])
+                    choices=['full', 'boundary', 'product'])
     ap.add_argument('--wave1-source', dest='wave1_source', default='modiolus',
                     choices=['aperture', 'modiolus'])
     ap.add_argument('--out', required=True, help='output directory')

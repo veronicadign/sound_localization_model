@@ -24,7 +24,7 @@ import sys
 PACKAGE_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, PACKAGE_ROOT)
 
-from recon_core.config import brainstem                       # noqa: E402
+from recon_core.config import brainstem, params as P            # noqa: E402
 from recon_core.utils import io_utils, paths                   # noqa: E402
 from ABR_reconstruction.main_abr_full import (                 # noqa: E402
     MONAURAL_SIDES, anf_wave1_group)
@@ -70,7 +70,7 @@ def build_parser(mode):
                      help='stimulus key: artificial ILD in dB')
     ap.add_argument('--ranks', type=int, default=4, help='MPI ranks per NEURON job')
     ap.add_argument('--anf-source', dest='anf_source', default='boundary',
-                    choices=['full', 'boundary'],
+                    choices=['full', 'boundary', 'product'],
                     help='auditory-nerve representation (default boundary)')
     ap.add_argument('--wave1-source', dest='wave1_source', default='modiolus',
                     choices=['aperture', 'modiolus'],
@@ -126,7 +126,8 @@ def sides_for(nucleus, condition, side):
 
 
 def anf_generators(args):
-    return (anf_wave1_group(args.anf_source, args.wave1_source), 'porus', 'brainstem')
+    return (anf_wave1_group(args.anf_source, args.wave1_source),
+            *P.ANF_JUNCTION_GROUPS[args.anf_source])
 
 
 def record_paths(nucleus, dipoles_dir, args, sides=None):
@@ -138,13 +139,15 @@ def record_paths(nucleus, dipoles_dir, args, sides=None):
             for g in gens for s in sides]
 
 
-def needs_run(record_list):
-    """True unless every record exists, is at full N and uses NEST weights."""
+def needs_run(record_list, variant=None):
+    """True unless every record exists, is at full N and carries the weight
+    tag of its pipeline (ANF records have no synapses and are not checked)."""
     for path in record_list:
         if not os.path.exists(path):
             return True
         attrs, _, _ = io_utils.read_dipole_record(path)
-        if attrs.get('syn_weights') != io_utils.SYN_WEIGHTS_TAG:
+        if (attrs.get('nucleus') != 'ANF'
+                and attrs.get('syn_weights') != io_utils.syn_weights_for(variant)):
             return True
         if attrs.get('n_cells') != attrs.get('n_total'):
             return True
@@ -156,7 +159,8 @@ def default_out_dir(args, mode):
     _, label = condition_key(args)
     side = '' if args.side == 'both' else f'_{args.side}'
     anf = ('' if (args.anf_source, args.wave1_source) == ('boundary', 'modiolus')
-           else '_anffull' if args.anf_source == 'full' else f'_anf{args.wave1_source}')
+           else f'_anf{args.anf_source}' if args.anf_source in ('full', 'product')
+           else f'_anf{args.wave1_source}')
     return os.path.join(RESULTS_ROOT,
                         f'{stem}_{label}_{args.condition}{side}{anf}_{mode}')
 
@@ -250,14 +254,14 @@ def _plan(mode, args, out_dir):
             steps.append(('ANF', cmd))
     if mode == 'nest':
         for nucleus in NUCLEI[1:]:
-            if force or needs_run(record_paths(nucleus, ddir, args)):
+            if force or needs_run(record_paths(nucleus, ddir, args), variant):
                 cmd = nest_nucleus_command(nucleus, args)
                 if cmd:
                     steps.append((NUCLEUS_UPPER[nucleus], cmd))
     else:
         chained = [p for n in NUCLEI[1:]
                    for p in record_paths(n, ddir, args, sides=('L', 'R'))]
-        if force or needs_run(chained):
+        if force or needs_run(chained, variant):
             steps.append(('NEURON chain (GBC/SBC -> MNTB -> MSO/LSO)', chain_command(args)))
     steps.append(('composite ABR', composite_command(args, out_dir, variant)))
     steps += figure_commands(args, out_dir, variant)

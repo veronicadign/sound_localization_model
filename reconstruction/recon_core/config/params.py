@@ -10,14 +10,17 @@ Two kinds of value live here:
 2. Reconstruction only: NEURON timestep, morphology geometry, probe layout,
    ABR filter band, conduction delays the point-neuron network cannot carry.
 
-Synaptic conductances are the NEST weights converted to µS,
-weight_uS = |NEST weight in nS| * 1e-3. The magnitude is taken because NEST
-signs a synapse by its weight and NEURON by its reversal potential. A pathway
-with weight 0 in NEST is off here too.
+Synaptic conductances follow the NEST weights, weight_uS = |NEST weight in
+nS| * scale. The NEST-driven pipeline uses scale = 1e-3 (the NEST weight
+itself); the NEURON chain uses the per-pathway SYN_SCALE. The magnitude is
+taken because NEST signs a synapse by its weight and NEURON by its reversal
+potential. A pathway with weight 0 in NEST is off here too.
 
 Head frame (µm): x dorsoventral, y rostrocaudal, z mediolateral. The geometry
 lives in recon_core.config.head_geometry and is re-exported at the end.
 """
+
+import os
 
 import numpy as np
 
@@ -34,13 +37,34 @@ BRAINSTEM = brainstem.parameters()
 # ===========================================================================
 NS_TO_US = 1e-3
 
+# 'nest': conductance = NEST weight. 'scaled': NEST weight x SYN_SCALE, used by
+# the NEURON chain (set by NEURON_chain/runner.py).
+SYN_MODE = os.environ.get('RECON_SYN_WEIGHTS', 'nest')
+if SYN_MODE not in ('nest', 'scaled'):
+    raise ValueError(f"RECON_SYN_WEIGHTS must be 'nest' or 'scaled', got {SYN_MODE!r}")
+
+# µS per NEST nS. Resulting conductance at the current NEST weights in brackets.
+MSO_SYN_SCALE = 0.0062                 # Couchman, Grothe & Felmy 2010 per-fibre fit
+SYN_SCALE = {
+    'SBCs2MSO':    MSO_SYN_SCALE,      # 37.2 nS
+    'MNTBCs2MSO':  MSO_SYN_SCALE,      # 49.6 nS
+    'LNTBCs2MSO':  MSO_SYN_SCALE,      # off in NEST
+    'SBCs2LSO':    0.240 / 5,          # 240 nS
+    'MNTBCs2LSO':  0.120 / 80,         # 120 nS
+    'ANFs2GBCs':   0.005 / 5,          # 5 nS (= NEST)
+    'ANFs2SBCs':   0.00107,            # 12.84 nS
+    'GBCs2MNTBCs': 0.050 / 30,         # 50 nS
+    'GBCs2calyx':  0.150 / 30,         # 150 nS
+}
+
 
 def syn_weight(pathway):
     """NEURON conductance in µS for one pathway, from the live NEST weight
     (0.0 when the pathway is off in NEST)."""
     nest_ns = getattr(BRAINSTEM.SYN_WEIGHTS, pathway.replace('2calyx', '2MNTBCs')
                       if pathway == 'GBCs2calyx' else pathway)
-    return abs(float(nest_ns)) * NS_TO_US
+    scale = SYN_SCALE[pathway] if SYN_MODE == 'scaled' else NS_TO_US
+    return abs(float(nest_ns)) * scale
 
 
 # ===========================================================================
@@ -382,19 +406,37 @@ ANF_FIBER_DIAM = 3.5     # µm
 ANF_DISTRIBUTED_GROUP = 'fibre'
 ANF_DISTAL_GROUP = 'distal'
 ANF_MODIOLUS_GROUP = 'modiolus'
+#: 'distal_bins' the distal bins of the nerve at their own positions and
+#:              orientations, cut at boundary_dipole.DISTAL_END_UM
+#:              (--anf-source product). The cut is itself the boundary that
+#:              shapes wave I: dropping the fibre past it is a lead-field step
+#:              to zero there.
+ANF_DISTAL_BINS_GROUP = 'distal_bins'
 
 #: Wave I representation -> the --anf-source mode that selects it. Any ANF
 #: generator that is not a stationary junction must be listed here, or
 #: main_abr_full refuses to assemble.
 ANF_WAVE1_GROUPS = {
-    ANF_DISTRIBUTED_GROUP: 'full',          # --anf-source full
-    ANF_DISTAL_GROUP:      'boundary',      # --anf-source boundary --wave1-source aperture
-    ANF_MODIOLUS_GROUP:    'boundary',      # --anf-source boundary --wave1-source modiolus
+    ANF_DISTRIBUTED_GROUP: ('full',),            # --anf-source full
+    ANF_DISTAL_BINS_GROUP: ('product',),         # --anf-source product
+    ANF_DISTAL_GROUP:      ('boundary',),        # --anf-source boundary --wave1-source aperture
+    ANF_MODIOLUS_GROUP:    ('boundary',),        # --anf-source boundary --wave1-source modiolus
 }
 
-#: Stationary junction potentials, present in every mode (Martin, Pratt &
-#: Schwegler 1995): porus = I_n, brainstem entry = II_p.
+#: Stationary junction potentials (Martin, Pratt & Schwegler 1995): porus = I_n,
+#: brainstem entry = II_p.
 ANF_STATIONARY_GROUPS = ('porus', 'brainstem')
+
+#: The product mode writes its own junction records, p = alpha * L * I_ax with
+#: no kappa and no transition kernel, under these names.
+ANF_PRODUCT_SUFFIX = '_product'
+
+#: Junction records each --anf-source assembles.
+ANF_JUNCTION_GROUPS = {
+    'boundary': ANF_STATIONARY_GROUPS,
+    'full': ANF_STATIONARY_GROUPS,
+    'product': tuple(g + ANF_PRODUCT_SUFFIX for g in ANF_STATIONARY_GROUPS),
+}
 
 # Inter-fibre dispersion: five central-axon diameters spanning the human range
 # (2.0-3.75 µm), equally weighted.

@@ -770,18 +770,23 @@ def run_side(args, side):
             jc['arcs_um'], jc['i_ax'], P.DT)
         print(f'  {side}: diam {diam:.2f} um -> v = {v_um_per_ms / 1e3:.1f} m/s; '
               f'axial-current extent {ap_um / 1e3:.2f} mm (regime diagnostic)')
-        # alpha, kappa and L are per junction (boundary_dipole).
+        # alpha, kappa and L are per junction (boundary_dipole). The product
+        # mode keeps p = alpha * L * I_ax along the local fibre tangent: no
+        # kappa, no transition kernel, and no modiolus source (wave I comes
+        # from the distal bins themselves).
+        product = args.anf_source == 'product'
         for name, row in zip(jc['names'], jc['i_ax']):
-            if name == 'modiolus' and getattr(
-                    args, 'wave1_source', 'modiolus') != 'modiolus':
-                continue        # wave I comes from the aperture source
+            if name == 'modiolus' and (product or getattr(
+                    args, 'wave1_source', 'modiolus') != 'modiolus'):
+                continue        # wave I comes from the aperture source or the fibre
             pos, tan = hg.junction_frame(name, side)
             if name in bd.ORIENT_ALONG_CANAL:
                 tan = bd.canal_axis(side)
             k_um = bd.LEAD_FIELD_TRANSITION_UM[name]
-            kern = bd.transition_kernel(P.DT, v_um_per_ms, k_um)
+            kern = None if product else bd.transition_kernel(P.DT, v_um_per_ms, k_um)
             p_one = bd.stationary_dipole(row, bd.ALPHA[name], tan, k_um,
-                                         kappa=bd.KAPPA[name], kernel=kern)
+                                         kappa=1.0 if product else bd.KAPPA[name],
+                                         kernel=kern)
             p_j = w * population_dipole(p_one[None, :, :], hist,
                                         shift_samples=shift)
             if name in boundary:
@@ -897,11 +902,16 @@ def main():
                         help='rebuild the cached unitary template(s) even if a '
                              'matching one is already on disk')
     parser.add_argument('--anf-source', type=str, default='boundary',
-                        choices=['full', 'boundary'], dest='anf_source',
+                        choices=['full', 'boundary', 'product'], dest='anf_source',
                         help="nerve representation. full: every bin of the nerve "
                              "(ANF__fibre). boundary (default): wave I from the "
                              "distal nerve, mid-nerve omitted. Both write the "
-                             "porus and brainstem stationary potentials.")
+                             "porus and brainstem stationary potentials. "
+                             "product: the distal bins as in boundary, at their "
+                             "own positions (ANF__distal_bins, no canal axis), "
+                             "plus porus and brainstem as alpha * L * I_ax along "
+                             "the fibre (no kappa, no kernel, no modiolus), "
+                             "written as ANF__{porus,brainstem}_product.")
     parser.add_argument('--wave1-source', type=str, default='modiolus',
                         choices=['aperture', 'modiolus'], dest='wave1_source',
                         help="wave I source under --anf-source boundary. "
@@ -937,8 +947,9 @@ def main():
     sources = []
     for side in sides:
         p, r, boundary = run_side(args, side)   # (K,3,T) head-frame, (K,3)
-        if args.anf_source == 'boundary':
+        if args.anf_source in ('boundary', 'product'):
             # Boundary reading: keep only the distal zone (the wave I generator).
+            # Product mode keeps those bins as they are (own positions).
             total_arc = float(np.linalg.norm(
                 np.diff(np.asarray(hg.ANF_PATH_UM[side]), axis=0), axis=1).sum())
             n_distal = max(1, int(round(
@@ -948,7 +959,10 @@ def main():
             print(f'  {side}: BOUNDARY reading -- keeping distal bins '
                   f'0-{n_distal - 1} (0-{n_distal * total_arc / 25 / 1e3:.1f} mm); '
                   'the mid and proximal nerve are suppressed by assertion')
-            if args.wave1_source == 'aperture':
+            if args.anf_source == 'product':
+                group = P.ANF_DISTAL_BINS_GROUP
+                write_distributed = True
+            elif args.wave1_source == 'aperture':
                 p, r = bd.aperture_source(p, r, side)
                 print(f'  {side}: APERTURE source -- the {n_distal} distal bins '
                       f'collapse to one dipole at the modiolus along the canal '
@@ -964,12 +978,13 @@ def main():
             write_distributed = True
 
         # Remove the record of the other --wave1-source, so the composite cannot
-        # sum two wave I representations.
+        # sum two wave I representations. The product mode writes under its own
+        # junction names and removes nothing.
         _drop = ('ANF__modiolus' if write_distributed
                  else f'ANF__{P.ANF_DISTAL_GROUP}')
         _stale = os.path.join(dipoles_dir,
                               f'{_drop}__{side}__binaural.h5')
-        if os.path.exists(_stale):
+        if args.anf_source != 'product' and os.path.exists(_stale):
             os.remove(_stale)
             print(f'  {side}: removed {_drop} (the other --wave1-source)')
 
@@ -981,13 +996,17 @@ def main():
                 sources.append(('ANF', side, p[k], r[k]))
         # One record per junction (K=1), kept separate from the wave I record.
         for name, (p_j, r_j) in boundary.items():
+            if args.anf_source == 'product':
+                name = f'{name}{P.ANF_PRODUCT_SUFFIX}'
             save_dipole_record(stem, cond_label, 'ANF', name, side, p_j, r_j,
                                P.N_ANF_TOTAL, P.N_ANF_TOTAL, P.SRATE,
                                directory=dipoles_dir)
             sources.append(('ANF', side, p_j[0], r_j[0]))
 
     final_dir = paths.make_output_dirs(
-        paths.output_dir_for('abr', stem, cond_label, args.side, prefix='anf'),
+        paths.output_dir_for('abr', stem, cond_label, args.side,
+                             prefix='anf_product' if args.anf_source == 'product'
+                             else 'anf'),
         subdirs=('figures',))
     electrode_names = list(P.ELECTRODES)
     V_out, srate = _apply_head_model(sources, final_dir, electrode_names)

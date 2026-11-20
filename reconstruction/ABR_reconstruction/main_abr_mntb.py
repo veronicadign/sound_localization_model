@@ -53,10 +53,18 @@ ROTATION = P.ROTATION_MNTB
 
 _pic_stem = paths.pic_stem
 
+# Settling transient: cells start off equilibrium and the first steps carry net
+# charge, which p = sum(r * i) turns into a position-dependent artefact. No
+# synaptic current can arrive before the NEST GBC spike (>= ANFs2GBCs) plus the
+# generator's own delay, so that window is blanked.
+SETTLE_MS = {'principal': P.BRAINSTEM.SYN_DELAYS.ANFs2GBCs + P.MNTB_DELAYS[0],
+             'calyx': P.BRAINSTEM.SYN_DELAYS.ANFs2GBCs + P.CALYX_DELAYS[0]}
+
 POPULATIONS = {
     'principal': dict(popclass=MNTBPopulation, hoc=MNTB_HOC, seed=46,
                       syn_delay=P.MNTB_DELAYS[0],  label='principal'),
-    'calyx':     dict(popclass=CalyxPopulation, hoc=CALYX_HOC, seed=47,
+    # Same seed as the principal cells: calyx i sits on principal cell i.
+    'calyx':     dict(popclass=CalyxPopulation, hoc=CALYX_HOC, seed=46,
                       syn_delay=P.CALYX_DELAYS[0], label='calyx'),
 }
 
@@ -218,6 +226,8 @@ def main():
         for side in sides:
             dipole, _ = _run_one_source(pop_name, side, args, meta_by_side[side])
             if RANK == 0:
+                dipole = np.asarray(dipole, dtype=float).copy()
+                dipole[:, :int(round(SETTLE_MS[pop_name] / DT))] = 0.0
                 p_head = head_model.rotate_to_head(dipole, ROTATION[side])
                 sources.append((pop_name, side, p_head, MNTB_POS_UM[side]))
                 save_dipole_record(stem, _cond_label(args), 'MNTB',

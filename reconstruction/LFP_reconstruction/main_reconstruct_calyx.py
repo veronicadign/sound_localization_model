@@ -66,5 +66,5 @@ def run_calyx(args, meta, spikes_dir, stem, contra_side):
     _run_population(
         CalyxPopulation, CALYX_HOC, X_pops, meta, spikes_dir, output_dir,
         k_yxl_local, j_yx_local, tau_yx_local, syn_delay_loc, syn_delay_scale,
-        n_syn_per_pop, args, seed=47, title='CALYX', fig_prefix='calyx',
+        n_syn_per_pop, args, seed=46, title='CALYX', fig_prefix='calyx',   # = principal cells
         v_init=P.MNTB_V_INIT)

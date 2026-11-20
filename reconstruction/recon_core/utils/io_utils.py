@@ -91,7 +91,12 @@ def read_population_dipole(path):
 
 
 #: Synaptic-weight convention written into every dipole record.
-SYN_WEIGHTS_TAG = 'nest'
+SYN_WEIGHTS_TAG = os.environ.get('RECON_SYN_WEIGHTS', 'nest')   # written
+
+
+def syn_weights_for(variant=None):
+    """Weight tag a record of this variant must carry ('scaled' for the chain)."""
+    return 'scaled' if variant == 'chain' else 'nest'
 
 
 def save_dipole_record(stem, cond_label, nucleus, generator, side, p_head,

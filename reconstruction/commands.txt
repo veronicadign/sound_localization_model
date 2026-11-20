@@ -45,7 +45,8 @@ Options (identical for `nest` and `chain`):
                                      --ild-db  artificial ILD
                                    default --angle 0
   --ranks N                        MPI ranks per NEURON job (default 4)
-  --anf-source full|boundary       auditory-nerve representation (default boundary)
+  --anf-source full|boundary|product
+                                   auditory-nerve representation (default boundary)
   --wave1-source aperture|modiolus wave I source with --anf-source boundary
                                    (default modiolus) -> STILL A WORK IN PROGRESS
   --no-force                       keep nuclei whose full-N records already exist
@@ -67,7 +68,9 @@ Examples:
 ================================================================================
 Same options and outputs. The ANF input comes from the .pic; GBC and SBC are
 simulated first, the MNTB is driven by the NEURON GBC spikes, and MSO/LSO by
-the NEURON SBC and MNTB spikes.
+the NEURON SBC and MNTB spikes. Synaptic conductances are the NEST weights
+times the per-pathway SYN_SCALE (recon_core/config/params.py); the NEST-driven
+pipeline uses the NEST weights unscaled.
 
   python reconstruction/main.py chain --pic-file <PIC> --itd-us 0 \
       --condition right_ear --side both --ranks 8
